@@ -19,7 +19,7 @@ pip install cognos2powerbi
 From source (recommended while the project is in preview):
 
 ```bash
-git clone https://github.com/your-org/cognos-to-powerbi.git
+git clone https://github.com/navintkr/cognos-to-powerbi.git
 cd cognos-to-powerbi
 python -m venv .venv
 # Windows: .venv\Scripts\activate    macOS/Linux: source .venv/bin/activate

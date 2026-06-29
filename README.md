@@ -4,7 +4,7 @@
 AI-assisted migration engine that converts Cognos report specifications into Power BI Project
 (PBIP) format using TMDL semantic models and PBIR report definitions.
 
-[![CI](https://github.com/your-org/cognos-to-powerbi/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/cognos-to-powerbi/actions/workflows/ci.yml)
+[![CI](https://github.com/navintkr/cognos-to-powerbi/actions/workflows/ci.yml/badge.svg)](https://github.com/navintkr/cognos-to-powerbi/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -63,7 +63,7 @@ cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport
 Run from source instead:
 
 ```bash
-git clone https://github.com/your-org/cognos-to-powerbi.git
+git clone https://github.com/navintkr/cognos-to-powerbi.git
 cd cognos-to-powerbi
 pip install -e ".[dev]"
 cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport
@@ -142,7 +142,7 @@ Full roadmap: [docs/roadmap.md](docs/roadmap.md).
 ## Contributing
 
 Contributions are welcome and wanted. Good first issues are labeled
-[`good first issue`](https://github.com/your-org/cognos-to-powerbi/labels/good%20first%20issue).
+[`good first issue`](https://github.com/navintkr/cognos-to-powerbi/labels/good%20first%20issue).
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) to get started.
 
 ## Security

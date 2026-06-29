@@ -58,11 +58,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/cognos-to-powerbi"
-Documentation = "https://github.com/your-org/cognos-to-powerbi#readme"
-Repository = "https://github.com/your-org/cognos-to-powerbi"
-Issues = "https://github.com/your-org/cognos-to-powerbi/issues"
-Changelog = "https://github.com/your-org/cognos-to-powerbi/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/navintkr/cognos-to-powerbi"
+Documentation = "https://github.com/navintkr/cognos-to-powerbi#readme"
+Repository = "https://github.com/navintkr/cognos-to-powerbi"
+Issues = "https://github.com/navintkr/cognos-to-powerbi/issues"
+Changelog = "https://github.com/navintkr/cognos-to-powerbi/blob/main/CHANGELOG.md"
 
 [project.scripts]
 cognos2pbi = "cognos2powerbi.cli:main"
