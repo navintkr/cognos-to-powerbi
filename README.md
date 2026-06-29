@@ -18,7 +18,7 @@ error-prone migration. This tool automates the heavy lifting:
 
 1. **Parse** Cognos report specification XML, Framework Manager models, and data modules.
 2. **Normalize** them into a vendor-neutral intermediate representation (IR).
-3. **Generate** Power BI Project (PBIP) output — TMDL semantic models and PBIR reports.
+3. **Generate** Power BI Project (PBIP) output: TMDL semantic models and PBIR reports.
 4. **Refine** the output with an AI assistant (Claude, GitHub Copilot, or Codex) to translate
    expressions, layouts, and visuals that have no direct mechanical mapping.
 
@@ -40,8 +40,8 @@ to the Power BI / Microsoft Fabric service.
 | --- | --- | --- |
 | Report specification (Report Studio XML) | PBIR report + TMDL tables | Available (beta) |
 | Queries and data items | TMDL columns and measures | Available (beta) |
-| Framework Manager model (`.cpf` / FM XML) | TMDL semantic model | In progress |
-| Data Modules | TMDL semantic model | In progress |
+| Framework Manager model (`.cpf` / FM XML) | TMDL semantic model | Available (beta) |
+| Data Modules | TMDL semantic model | Planned |
 | Dashboards | PBIR report pages | Planned |
 
 See the [migration coverage matrix](docs/coverage.md) for detail on expressions, filters, and
@@ -141,9 +141,10 @@ uvicorn cognos2powerbi.api.main:app --reload
 ## Roadmap
 
 - [x] Framework Manager model conversion to TMDL
+- [x] Expression translation library (Cognos to DAX)
+- [x] Parameterized data-source wiring for refreshable PBIP
 - [ ] Data Module conversion
 - [ ] Dashboard to PBIR page mapping
-- [ ] Expression translation library (Cognos -> DAX)
 - [ ] Hosted SaaS portal with upload, review, and download
 - [ ] Batch / folder migration with a coverage report
 
