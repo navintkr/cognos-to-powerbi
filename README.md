@@ -56,6 +56,13 @@ pip install cognos2powerbi
 # Convert a single Cognos report specification to a Power BI project
 cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport
 
+# Point the generated model at your database (refreshable PBIP)
+cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport \
+  --server sql01.contoso.com --database Sales
+
+# Convert a Cognos Framework Manager model to a Power BI semantic model
+cognos2pbi migrate-model ./examples/sample_model.xml --out ./out/SalesModel
+
 # Open the generated project
 #   ./out/SalesReport/SalesReport.pbip   ->  open in Power BI Desktop
 ```
@@ -112,9 +119,11 @@ cognos-to-powerbi/
 │   │   ├── ir/                # Vendor-neutral intermediate representation
 │   │   ├── parsers/           # Cognos report/model parsers
 │   │   ├── generators/        # PBIP (TMDL + PBIR) generators
+│   │   ├── translate/         # Deterministic Cognos-to-DAX translation
 │   │   ├── ai/                # Provider-agnostic AI adapter
 │   │   └── pipeline.py        # Orchestration
 │   └── api/                   # FastAPI backend (SaaS surface)
+├── web/                       # Single-page web frontend
 ├── examples/                  # Sample Cognos inputs
 ├── docs/                      # Documentation
 └── tests/                     # Test suite
@@ -125,12 +134,13 @@ cognos-to-powerbi/
 ```bash
 pip install -e ".[api]"
 uvicorn cognos2powerbi.api.main:app --reload
-# POST a Cognos report to http://127.0.0.1:8000/api/v1/migrate
+# Open the web UI at http://127.0.0.1:8000/
+# Or POST a Cognos report to http://127.0.0.1:8000/api/v1/migrate
 ```
 
 ## Roadmap
 
-- [ ] Framework Manager model conversion to TMDL
+- [x] Framework Manager model conversion to TMDL
 - [ ] Data Module conversion
 - [ ] Dashboard to PBIR page mapping
 - [ ] Expression translation library (Cognos -> DAX)

@@ -11,11 +11,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Initial project scaffold.
 - Cognos report specification parser (beta).
+- Cognos Framework Manager model parser with the `migrate-model` command, producing TMDL tables
+  and relationships.
+- Deterministic Cognos-to-DAX expression translation library (references, arithmetic with
+  aggregates, if/then/else, case, common string and date functions).
+- Parameterized SQL Server data-source wiring: generated models include `Server` and `Database`
+  parameters and `Sql.Database` partitions so the PBIP is refreshable. Configure with
+  `--source-type`, `--server`, `--database`, and `--schema`.
+- Single-page web frontend served by the FastAPI backend for upload, analyze, and download.
 - Vendor-neutral intermediate representation (IR).
 - PBIP generator producing TMDL semantic models and PBIR reports.
 - Provider-agnostic AI adapter for Claude, GitHub Copilot, and Codex CLIs.
 - Command-line interface (`cognos2pbi`).
 - FastAPI backend for the SaaS surface.
+- PyPI publishing workflow using Trusted Publishing (OIDC).
 
 ## [0.1.0] - 2026-06-29
 

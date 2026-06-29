@@ -11,11 +11,12 @@ welcome.
 | Query | Semantic-model table | Available |
 | Data item (no aggregate) | Column | Available |
 | Data item (sum/avg/min/max/count) on a simple reference | DAX measure | Available |
-| Data item with a complex expression | DAX measure (AI-assisted) | Partial |
+| Data item with a complex expression | DAX measure (deterministic, AI fallback) | Partial |
 | List | Table visual | Available |
 | Crosstab | Matrix visual | Partial |
 | Column / bar / line / pie chart | Corresponding Power BI visual | Partial |
 | Page | Report page | Available |
+| Data source partitions | Parameterized Power Query (SQL Server) | Available |
 | Filters / detail filters | Visual / page filters | Planned |
 | Conditional formatting | Conditional formatting | Planned |
 | Prompts and parameters | Slicers / parameters | Planned |
@@ -24,9 +25,11 @@ welcome.
 
 | Cognos construct | Power BI target | Status |
 | --- | --- | --- |
-| Framework Manager model | TMDL semantic model | Planned |
+| Framework Manager model | TMDL semantic model | Available |
+| Query subject | Semantic-model table | Available |
+| Query item | Column | Available |
+| Relationships | TMDL relationships | Available |
 | Data Module | TMDL semantic model | Planned |
-| Relationships | TMDL relationships | Planned |
 | Calculations | DAX measures / columns | Planned |
 
 ## Expressions
@@ -34,9 +37,11 @@ welcome.
 | Category | Status |
 | --- | --- |
 | Simple qualified references | Available |
-| Arithmetic and aggregate combinations | AI-assisted |
-| Conditional logic (if/case) | AI-assisted |
-| Date and time functions | Planned (translation library) |
+| Arithmetic and aggregate combinations | Available |
+| Conditional logic (if/case) | Available |
+| String functions (substring, length, upper/lower, trim) | Available |
+| Date and time functions (extract year/month/day) | Available |
+| Unsupported or vendor-specific functions | AI-assisted |
 
 Legend: Available = deterministic; Partial = supported with reduced fidelity; AI-assisted =
 requires the AI refinement stage; Planned = not yet implemented.
