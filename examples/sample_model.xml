@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://www.developer.cognos.com/schemas/bmt/60/12">
+  <name>Sales Model</name>
+  <namespace>
+    <name>model</name>
+    <querySubject>
+      <name>Sales</name>
+      <queryItem>
+        <name>Sales ID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>Product ID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>Order year</name>
+        <datatype>int32</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+      <queryItem>
+        <name>Revenue</name>
+        <datatype>decimal</datatype>
+        <usage>fact</usage>
+      </queryItem>
+    </querySubject>
+    <querySubject>
+      <name>Product</name>
+      <queryItem>
+        <name>Product ID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>Product line</name>
+        <datatype>nvarchar</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+    </querySubject>
+    <relationship>
+      <name>Sales_Product</name>
+      <expression>[model].[Sales].[Product ID] = [model].[Product].[Product ID]</expression>
+    </relationship>
+  </namespace>
+</project>

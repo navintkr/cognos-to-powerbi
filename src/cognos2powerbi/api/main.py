@@ -17,7 +17,8 @@ import zipfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from cognos2powerbi import __version__
 from cognos2powerbi.core.pipeline import run_migration
@@ -30,6 +31,15 @@ app = FastAPI(
 
 _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 _ALLOWED_PROVIDERS = {"claude", "copilot", "codex", "none"}
+_WEB_DIR = Path(__file__).resolve().parents[3] / "web"
+
+if _WEB_DIR.is_dir():
+    app.mount("/app", StaticFiles(directory=str(_WEB_DIR), html=True), name="app")
+
+    @app.get("/", include_in_schema=False)
+    def index() -> FileResponse:
+        """Serve the single-page web frontend."""
+        return FileResponse(str(_WEB_DIR / "index.html"))
 
 
 @app.get("/health")

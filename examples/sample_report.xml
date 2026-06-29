@@ -18,6 +18,9 @@
         <dataItem name="Gross profit" aggregate="total">
           <expression>[Sales].[Measures].[Revenue] - [Sales].[Measures].[Cost]</expression>
         </dataItem>
+        <dataItem name="Revenue rank" aggregate="calculated">
+          <expression>rank([Sales].[Measures].[Revenue])</expression>
+        </dataItem>
       </selection>
     </query>
   </queries>

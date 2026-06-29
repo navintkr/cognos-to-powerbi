@@ -11,9 +11,69 @@ from rich.table import Table as RichTable
 
 from cognos2powerbi import __version__
 from cognos2powerbi.core.ai import get_provider
-from cognos2powerbi.core.pipeline import run_migration
+from cognos2powerbi.core.ir.models import DataSource, DataSourceKind
+from cognos2powerbi.core.pipeline import MigrationResult, run_migration, run_model_migration
 
 console = Console()
+
+_SOURCE_TYPE_OPTION = click.option(
+    "--source-type",
+    type=click.Choice(["sqlserver", "none"], case_sensitive=False),
+    default="sqlserver",
+    show_default=True,
+    help="Physical data source for the generated Power Query partitions.",
+)
+_SERVER_OPTION = click.option(
+    "--server",
+    default="localhost",
+    show_default=True,
+    help="SQL Server name used for the Server parameter in the generated model.",
+)
+_DATABASE_OPTION = click.option(
+    "--database",
+    default="AdventureWorks",
+    show_default=True,
+    help="Database name used for the Database parameter in the generated model.",
+)
+_SCHEMA_OPTION = click.option(
+    "--schema",
+    "schema_name",
+    default="dbo",
+    show_default=True,
+    help="Schema used when navigating to tables in the generated Power Query.",
+)
+
+
+def _build_data_source(
+    source_type: str, server: str, database: str, schema_name: str
+) -> DataSource:
+    kind = DataSourceKind.NONE if source_type.lower() == "none" else DataSourceKind.SQL_SERVER
+    return DataSource(
+        kind=kind,
+        server=server,
+        database=database,
+        schema_name=schema_name,
+    )
+
+
+def _print_summary(result: MigrationResult, out_dir: Path) -> None:
+    summary = RichTable(show_header=False, box=None, pad_edge=False)
+    summary.add_row("Project", result.project_name)
+    summary.add_row("PBIP", result.pbip_path)
+    summary.add_row("Tables", str(result.table_count))
+    summary.add_row("Measures", str(result.measure_count))
+    summary.add_row("Pages", str(result.page_count))
+    summary.add_row("AI provider", result.ai_provider)
+    summary.add_row("AI refinements", str(result.ai_refinements))
+    summary.add_row("Items to review", str(result.review_flag_count))
+    console.print(summary)
+
+    if result.review_flag_count:
+        review_path = Path(out_dir) / "MIGRATION_REVIEW.md"
+        console.print(
+            f"[yellow]{result.review_flag_count} item(s) need review. See {review_path}.[/yellow]"
+        )
+    console.print("[green]Done.[/green]")
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -38,28 +98,60 @@ def cli() -> None:
     show_default=True,
     help="AI provider used to refine expressions that have no deterministic mapping.",
 )
-def migrate(source: Path, out_dir: Path, ai: str) -> None:
+@_SOURCE_TYPE_OPTION
+@_SERVER_OPTION
+@_DATABASE_OPTION
+@_SCHEMA_OPTION
+def migrate(
+    source: Path,
+    out_dir: Path,
+    ai: str,
+    source_type: str,
+    server: str,
+    database: str,
+    schema_name: str,
+) -> None:
     """Migrate a single Cognos report specification to a Power BI Project."""
     console.print(f"[bold]Migrating[/bold] {source}")
-    result = run_migration(source, out_dir, ai=ai)
+    data_source = _build_data_source(source_type, server, database, schema_name)
+    result = run_migration(source, out_dir, ai=ai, data_source=data_source)
+    _print_summary(result, out_dir)
 
-    summary = RichTable(show_header=False, box=None, pad_edge=False)
-    summary.add_row("Project", result.project_name)
-    summary.add_row("PBIP", result.pbip_path)
-    summary.add_row("Tables", str(result.table_count))
-    summary.add_row("Measures", str(result.measure_count))
-    summary.add_row("Pages", str(result.page_count))
-    summary.add_row("AI provider", result.ai_provider)
-    summary.add_row("AI refinements", str(result.ai_refinements))
-    summary.add_row("Items to review", str(result.review_flag_count))
-    console.print(summary)
 
-    if result.review_flag_count:
-        review_path = Path(out_dir) / "MIGRATION_REVIEW.md"
-        console.print(
-            f"[yellow]{result.review_flag_count} item(s) need review. See {review_path}.[/yellow]"
-        )
-    console.print("[green]Done.[/green]")
+@cli.command(name="migrate-model")
+@click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--out",
+    "out_dir",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Output directory for the generated Power BI Project.",
+)
+@click.option(
+    "--ai",
+    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
+    default="none",
+    show_default=True,
+    help="AI provider used to refine expressions that have no deterministic mapping.",
+)
+@_SOURCE_TYPE_OPTION
+@_SERVER_OPTION
+@_DATABASE_OPTION
+@_SCHEMA_OPTION
+def migrate_model(
+    source: Path,
+    out_dir: Path,
+    ai: str,
+    source_type: str,
+    server: str,
+    database: str,
+    schema_name: str,
+) -> None:
+    """Migrate a Cognos Framework Manager model to a Power BI semantic model."""
+    console.print(f"[bold]Migrating model[/bold] {source}")
+    data_source = _build_data_source(source_type, server, database, schema_name)
+    result = run_model_migration(source, out_dir, ai=ai, data_source=data_source)
+    _print_summary(result, out_dir)
 
 
 @cli.command()

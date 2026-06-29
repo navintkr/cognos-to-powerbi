@@ -28,6 +28,8 @@ import uuid
 from pathlib import Path
 
 from cognos2powerbi.core.ir.models import (
+    DataSource,
+    DataSourceKind,
     MigrationProject,
     Table,
     Visual,
@@ -83,7 +85,7 @@ class PbipGenerator:
         for table in project.tables:
             _write_text(
                 definition / "tables" / f"{table.name}.tmdl",
-                self._render_table_tmdl(table),
+                self._render_table_tmdl(table, project.data_source),
             )
 
     def _render_model_tmdl(self, project: MigrationProject) -> str:
@@ -93,12 +95,32 @@ class PbipGenerator:
             "\tdefaultPowerBIDataSourceVersion: powerBI_V3",
             "",
         ]
+        source = project.data_source
+        if source.kind == DataSourceKind.SQL_SERVER:
+            lines.append(
+                f'expression Server = "{source.server}" meta '
+                '[IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]'
+            )
+            lines.append(
+                f'expression Database = "{source.database}" meta '
+                '[IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]'
+            )
+            lines.append("")
         for table in project.tables:
             lines.append(f"ref table {table.name}")
         lines.append("")
+        for relationship in project.relationships:
+            from_ref = f"{relationship.from_table}.{_escape_tmdl_name(relationship.from_column)}"
+            to_ref = f"{relationship.to_table}.{_escape_tmdl_name(relationship.to_column)}"
+            lines.append(f"relationship {uuid.uuid4()}")
+            if not relationship.is_active:
+                lines.append("\tisActive: false")
+            lines.append(f"\tfromColumn: {from_ref}")
+            lines.append(f"\ttoColumn: {to_ref}")
+            lines.append("")
         return "\n".join(lines)
 
-    def _render_table_tmdl(self, table: Table) -> str:
+    def _render_table_tmdl(self, table: Table, data_source: DataSource) -> str:
         lines = [f"table {table.name}", ""]
         for column in table.columns:
             lines.append(f"\tcolumn {_escape_tmdl_name(column.name)}")
@@ -116,15 +138,28 @@ class PbipGenerator:
         lines.append(f"\tpartition {table.name} = m")
         lines.append("\t\tmode: import")
         lines.append("\t\tsource =")
-        lines.append("\t\t\tlet")
-        lines.append(
-            "\t\t\t\tSource = #table(type table [], {})"
-            "  // TODO: replace with the Power Query for this Cognos query"
-        )
-        lines.append("\t\t\tin")
-        lines.append("\t\t\t\tSource")
+        lines.extend(self._render_partition_source(table, data_source))
         lines.append("")
         return "\n".join(lines)
+
+    def _render_partition_source(self, table: Table, data_source: DataSource) -> list[str]:
+        if data_source.kind == DataSourceKind.SQL_SERVER:
+            item = table.source_query or table.name
+            return [
+                "\t\t\tlet",
+                "\t\t\t\tSource = Sql.Database(Server, Database),",
+                f'\t\t\t\tNavigation = Source{{[Schema="{data_source.schema_name}", '
+                f'Item="{item}"]}}[Data]',
+                "\t\t\tin",
+                "\t\t\t\tNavigation",
+            ]
+        return [
+            "\t\t\tlet",
+            "\t\t\t\tSource = #table(type table [], {})"
+            "  // TODO: replace with the Power Query for this Cognos query",
+            "\t\t\tin",
+            "\t\t\t\tSource",
+        ]
 
     # -------------------------------------------------------------------- Report
 

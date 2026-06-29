@@ -32,20 +32,7 @@ from cognos2powerbi.core.ir.models import (
     VisualField,
     VisualType,
 )
-
-_AGGREGATE_TO_DAX = {
-    "total": "SUM",
-    "sum": "SUM",
-    "average": "AVERAGE",
-    "avg": "AVERAGE",
-    "minimum": "MIN",
-    "min": "MIN",
-    "maximum": "MAX",
-    "max": "MAX",
-    "count": "COUNT",
-    "countdistinct": "DISTINCTCOUNT",
-    "calculated": None,
-}
+from cognos2powerbi.core.translate import translate_measure_expression
 
 _LAYOUT_TO_VISUAL = {
     "list": VisualType.TABLE,
@@ -154,22 +141,26 @@ class CognosReportParser:
             )
             return
 
-        dax_func = _AGGREGATE_TO_DAX.get(aggregate)
-        dax_expression: str | None = None
-        if dax_func and cognos_expression and _is_simple_reference(cognos_expression):
-            dax_expression = f"{dax_func}({table.name}[{item_name}])"
-        else:
+        translation = translate_measure_expression(
+            cognos_expression or f"[{item_name}]",
+            table.name,
+            aggregate,
+        )
+        needs_review = not translation.confident
+        if needs_review:
             project.add_flag(
                 "measure-needs-review",
-                f"Measure '{item_name}' uses a Cognos expression that needs translation to DAX.",
+                f"Measure '{item_name}' uses a Cognos expression that needs review after "
+                "deterministic translation to DAX.",
                 Severity.WARNING,
                 source_ref=cognos_expression,
             )
         table.measures.append(
             Measure(
                 name=item_name,
-                dax_expression=dax_expression,
+                dax_expression=translation.dax,
                 cognos_expression=cognos_expression,
+                needs_review=needs_review,
             )
         )
 

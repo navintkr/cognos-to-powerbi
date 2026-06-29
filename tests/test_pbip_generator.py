@@ -41,3 +41,26 @@ def test_review_report_written_when_flags_exist(tmp_path: Path) -> None:
     result = run_migration(EXAMPLE, tmp_path, ai="none")
     assert result.review_flag_count > 0
     assert (tmp_path / "MIGRATION_REVIEW.md").is_file()
+
+
+def test_sql_server_partition_and_parameters(tmp_path: Path) -> None:
+    result = run_migration(EXAMPLE, tmp_path, ai="none")
+    definition = tmp_path / f"{result.project_name}.SemanticModel" / "definition"
+    model_tmdl = (definition / "model.tmdl").read_text(encoding="utf-8")
+    assert "expression Server =" in model_tmdl
+    assert "expression Database =" in model_tmdl
+
+    table_tmdl = (definition / "tables" / "Sales.tmdl").read_text(encoding="utf-8")
+    assert "Sql.Database(Server, Database)" in table_tmdl
+    assert 'Item="Sales"' in table_tmdl
+
+
+def test_none_source_keeps_placeholder_partition(tmp_path: Path) -> None:
+    from cognos2powerbi.core.ir.models import DataSource, DataSourceKind
+
+    data_source = DataSource(kind=DataSourceKind.NONE)
+    result = run_migration(EXAMPLE, tmp_path, ai="none", data_source=data_source)
+    table_tmdl = (
+        tmp_path / f"{result.project_name}.SemanticModel" / "definition" / "tables" / "Sales.tmdl"
+    ).read_text(encoding="utf-8")
+    assert "#table(type table [], {})" in table_tmdl

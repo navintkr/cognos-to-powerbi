@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cognos to Power BI Migration</title>
+    <meta
+      name="description"
+      content="Convert IBM Cognos reports and Framework Manager models to Microsoft Power BI (PBIP, TMDL, PBIR). Upload a report, run the migration, download a Power BI Project."
+    />
+    <link rel="stylesheet" href="/app/styles.css" />
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="container">
+        <p class="eyebrow">Open source migration tooling</p>
+        <h1>Cognos to Power BI</h1>
+        <p class="lede">
+          Convert IBM Cognos reports and Framework Manager models into a refreshable Microsoft
+          Power BI Project. Upload a report specification, choose an optional AI provider, and
+          download a PBIP folder with TMDL semantic model and PBIR report definitions.
+        </p>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="panel" aria-labelledby="upload-heading">
+        <h2 id="upload-heading">Migrate a report</h2>
+        <form id="migrate-form">
+          <div class="field">
+            <label for="file">Cognos report specification (XML)</label>
+            <input id="file" name="file" type="file" accept=".xml" required />
+          </div>
+          <div class="field">
+            <label for="ai">AI refinement provider</label>
+            <select id="ai" name="ai">
+              <option value="none" selected>None (deterministic only)</option>
+              <option value="claude">Claude</option>
+              <option value="copilot">GitHub Copilot</option>
+              <option value="codex">Codex</option>
+            </select>
+          </div>
+          <div class="actions">
+            <button type="button" id="analyze-btn" class="secondary">Analyze</button>
+            <button type="submit" id="migrate-btn" class="primary">Migrate and download</button>
+          </div>
+        </form>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <pre id="summary" class="summary" hidden></pre>
+      </section>
+
+      <section class="panel" aria-labelledby="how-heading">
+        <h2 id="how-heading">How it works</h2>
+        <ol class="steps">
+          <li>Your file is parsed into a vendor-neutral intermediate representation.</li>
+          <li>Tables, columns, measures, relationships, and visuals are mapped to Power BI.</li>
+          <li>Cognos expressions are translated to DAX deterministically, with optional AI review.</li>
+          <li>A Power BI Project (PBIP) is generated and returned as a zip archive.</li>
+        </ol>
+      </section>
+    </main>
+
+    <footer class="container">
+      <p>
+        Open source on
+        <a href="https://github.com/navintkr/cognos-to-powerbi">GitHub</a>. No data is retained
+        after your migration completes.
+      </p>
+    </footer>
+
+    <script src="/app/app.js"></script>
+  </body>
+</html>

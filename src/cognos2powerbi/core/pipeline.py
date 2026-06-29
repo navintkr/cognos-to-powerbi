@@ -8,8 +8,12 @@ from pydantic import BaseModel
 
 from cognos2powerbi.core.ai import AiProvider, AiRequest, get_provider
 from cognos2powerbi.core.generators import generate_pbip
-from cognos2powerbi.core.ir.models import MigrationProject, Severity
-from cognos2powerbi.core.parsers import parse_report
+from cognos2powerbi.core.ir.models import (
+    DataSource,
+    MigrationProject,
+    Severity,
+)
+from cognos2powerbi.core.parsers import parse_model, parse_report
 
 
 class MigrationResult(BaseModel):
@@ -38,11 +42,15 @@ def _refine_with_ai(project: MigrationProject, provider: AiProvider) -> int:
             Severity.INFO,
         )
         return 0
+    if provider.name == "none":
+        return 0
 
     refined = 0
     for table in project.tables:
         for measure in table.measures:
-            if measure.dax_expression or not measure.cognos_expression:
+            if not measure.cognos_expression:
+                continue
+            if measure.dax_expression and not measure.needs_review:
                 continue
             request = AiRequest(
                 instruction=(
@@ -59,6 +67,7 @@ def _refine_with_ai(project: MigrationProject, provider: AiProvider) -> int:
             result = provider.complete(request)
             if result.ok and result.text:
                 measure.dax_expression = result.text.strip()
+                measure.needs_review = False
                 refined += 1
             else:
                 project.add_flag(
@@ -75,6 +84,7 @@ def run_migration(
     source: str | Path,
     out_dir: str | Path,
     ai: str | None = None,
+    data_source: DataSource | None = None,
 ) -> MigrationResult:
     """Run the full migration for a single Cognos report specification.
 
@@ -82,11 +92,51 @@ def run_migration(
         source: Path to the Cognos report specification XML.
         out_dir: Directory to write the Power BI Project into.
         ai: AI provider name (``claude``, ``copilot``, ``codex``, or ``none``).
+        data_source: Optional physical data source used for generated Power Query partitions.
 
     Returns:
         A :class:`MigrationResult` summarizing the migration.
     """
     project = parse_report(source)
+    if data_source is not None:
+        project.data_source = data_source
+    provider = get_provider(ai)
+    refinements = _refine_with_ai(project, provider)
+    pbip_path = generate_pbip(project, out_dir)
+
+    measure_count = sum(len(table.measures) for table in project.tables)
+    return MigrationResult(
+        project_name=project.name,
+        pbip_path=str(pbip_path),
+        table_count=len(project.tables),
+        page_count=len(project.pages),
+        measure_count=measure_count,
+        review_flag_count=len(project.review_flags),
+        ai_provider=provider.name,
+        ai_refinements=refinements,
+    )
+
+
+def run_model_migration(
+    source: str | Path,
+    out_dir: str | Path,
+    ai: str | None = None,
+    data_source: DataSource | None = None,
+) -> MigrationResult:
+    """Run the migration for a single Cognos Framework Manager model.
+
+    Args:
+        source: Path to the Framework Manager model XML.
+        out_dir: Directory to write the Power BI Project into.
+        ai: AI provider name (``claude``, ``copilot``, ``codex``, or ``none``).
+        data_source: Optional physical data source used for generated Power Query partitions.
+
+    Returns:
+        A :class:`MigrationResult` summarizing the migration.
+    """
+    project = parse_model(source)
+    if data_source is not None:
+        project.data_source = data_source
     provider = get_provider(ai)
     refinements = _refine_with_ai(project, provider)
     pbip_path = generate_pbip(project, out_dir)

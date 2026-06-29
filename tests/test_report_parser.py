@@ -28,11 +28,19 @@ def test_simple_aggregate_becomes_dax_measure() -> None:
     assert revenue.dax_expression == "SUM(Sales[Revenue])"
 
 
-def test_complex_expression_flags_for_review() -> None:
+def test_arithmetic_expression_translates_deterministically() -> None:
     project = parse_report(EXAMPLE)
     table = project.tables[0]
     gross = next(m for m in table.measures if m.name == "Gross profit")
-    assert gross.dax_expression is None
+    assert gross.dax_expression == "SUM(Sales[Revenue]) - SUM(Sales[Cost])"
+    assert gross.needs_review is False
+
+
+def test_unknown_function_flags_for_review() -> None:
+    project = parse_report(EXAMPLE)
+    table = project.tables[0]
+    ranked = next(m for m in table.measures if m.name == "Revenue rank")
+    assert ranked.needs_review is True
     assert any(f.code == "measure-needs-review" for f in project.review_flags)
 
 

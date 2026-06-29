@@ -57,6 +57,13 @@ class VisualType(str, Enum):
     UNKNOWN = "tableEx"
 
 
+class DataSourceKind(str, Enum):
+    """Supported physical data sources for the generated Power BI model."""
+
+    SQL_SERVER = "sqlServer"
+    NONE = "none"
+
+
 class ReviewFlag(BaseModel):
     """A migration item that needs human or AI review."""
 
@@ -83,6 +90,7 @@ class Measure(BaseModel):
     dax_expression: str | None = None
     cognos_expression: str | None = None
     format_string: str | None = None
+    needs_review: bool = False
 
 
 class Table(BaseModel):
@@ -102,6 +110,20 @@ class Relationship(BaseModel):
     to_table: str
     to_column: str
     is_active: bool = True
+
+
+class DataSource(BaseModel):
+    """Physical data source used to populate the generated semantic model.
+
+    Cognos report specifications reference a logical model, not a physical connection, so the
+    generator emits a parameterized Power Query that the user points at their own database. When
+    the kind is ``NONE`` the generator emits empty placeholder tables instead.
+    """
+
+    kind: DataSourceKind = DataSourceKind.SQL_SERVER
+    server: str = "localhost"
+    database: str = "AdventureWorks"
+    schema_name: str = "dbo"
 
 
 class VisualField(BaseModel):
@@ -137,6 +159,7 @@ class MigrationProject(BaseModel):
 
     name: str
     source_path: str | None = None
+    data_source: DataSource = Field(default_factory=DataSource)
     tables: list[Table] = Field(default_factory=list)
     relationships: list[Relationship] = Field(default_factory=list)
     pages: list[ReportPage] = Field(default_factory=list)
