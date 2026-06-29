@@ -1,0 +1,91 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cognos2powerbi"
+version = "0.1.0"
+description = "Open-source tool to migrate IBM Cognos reports and models to Microsoft Power BI (PBIP / TMDL / PBIR) with AI assistance."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Cognos to Power BI contributors" }]
+keywords = [
+  "cognos",
+  "power-bi",
+  "powerbi",
+  "cognos-to-power-bi",
+  "migration",
+  "pbip",
+  "tmdl",
+  "pbir",
+  "business-intelligence",
+  "report-conversion",
+  "ibm-cognos",
+  "data-migration",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Database",
+  "Topic :: Software Development :: Code Generators",
+]
+dependencies = [
+  "click>=8.1",
+  "rich>=13.7",
+  "pydantic>=2.6",
+  "lxml>=5.1",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+api = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "python-multipart>=0.0.9",
+]
+dev = [
+  "pytest>=8.0",
+  "pytest-cov>=4.1",
+  "ruff>=0.4",
+  "mypy>=1.9",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/cognos-to-powerbi"
+Documentation = "https://github.com/your-org/cognos-to-powerbi#readme"
+Repository = "https://github.com/your-org/cognos-to-powerbi"
+Issues = "https://github.com/your-org/cognos-to-powerbi/issues"
+Changelog = "https://github.com/your-org/cognos-to-powerbi/blob/main/CHANGELOG.md"
+
+[project.scripts]
+cognos2pbi = "cognos2powerbi.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cognos2powerbi"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI uses callables (File, Form) as argument defaults by design.
+"src/cognos2powerbi/api/*.py" = ["B008"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_ignores = true
+ignore_missing_imports = true

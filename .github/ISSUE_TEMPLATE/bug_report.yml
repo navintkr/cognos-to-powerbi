@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a problem with a Cognos to Power BI migration
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for filing a bug. Please remove or anonymize any sensitive identifiers from sample
+        input before attaching it.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact command you ran.
+      placeholder: |
+        1. cognos2pbi migrate ./report.xml --out ./out/Report
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample Cognos input
+      description: Minimal, anonymized report specification or model that reproduces the issue.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `cognos2pbi --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: ai-provider
+    attributes:
+      label: AI provider
+      options:
+        - none
+        - claude
+        - copilot
+        - codex
+    validations:
+      required: true

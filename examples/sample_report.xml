@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report xmlns="http://developer.cognos.com/schemas/report/16.2/" expressionLocale="en-us">
+  <queries>
+    <query name="Sales">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="Product line" aggregate="none">
+          <expression>[Sales].[Products].[Product line]</expression>
+        </dataItem>
+        <dataItem name="Order year" aggregate="none">
+          <expression>[Sales].[Time].[Order year]</expression>
+        </dataItem>
+        <dataItem name="Revenue" aggregate="total">
+          <expression>[Sales].[Measures].[Revenue]</expression>
+        </dataItem>
+        <dataItem name="Gross profit" aggregate="total">
+          <expression>[Sales].[Measures].[Revenue] - [Sales].[Measures].[Cost]</expression>
+        </dataItem>
+      </selection>
+    </query>
+  </queries>
+  <layouts>
+    <layout>
+      <reportPages>
+        <page name="Sales Overview">
+          <pageBody>
+            <contents>
+              <list refQuery="Sales" name="SalesList"/>
+              <vizColumn refQuery="Sales" name="RevenueByLine"/>
+            </contents>
+          </pageBody>
+        </page>
+      </reportPages>
+    </layout>
+  </layouts>
+</report>
