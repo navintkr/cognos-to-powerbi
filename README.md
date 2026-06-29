@@ -76,6 +76,59 @@ pip install -e ".[dev]"
 cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport
 ```
 
+## End-to-end demo (complex report on local SQL Server)
+
+This walkthrough migrates a complex Cognos report, wires the generated model to a local SQL
+Server database, and opens a refreshable Power BI Project. Everything it needs ships in the repo:
+
+- [examples/complex_sales_report.xml](examples/complex_sales_report.xml) - a Cognos report with
+  three queries (FactSales, DimProduct, DimDate), typed columns, six aggregate measures
+  (including translated arithmetic such as `Gross Profit` and `Net Revenue`), and three pages of
+  list, crosstab, column, line, and pie visuals.
+- [examples/sql/setup_demo_db.sql](examples/sql/setup_demo_db.sql) - creates the matching
+  `CognosDemo` database with sample data. Table and column names line up with the report, so the
+  generated PBIP refreshes with no manual edits.
+
+### Step-by-step video
+
+> Walkthrough video: add your recording link here (for example a Loom or YouTube URL).
+> Suggested flow to record: run the SQL script, run `cognos2pbi migrate`, open the `.pbip` in
+> Power BI Desktop, set the `Server` / `Database` parameters, then Refresh.
+
+### 1. Install the demo database
+
+Requires a local SQL Server instance and `sqlcmd`. Using a default instance with Windows auth:
+
+```powershell
+sqlcmd -S localhost -E -C -i examples/sql/setup_demo_db.sql
+```
+
+This creates `CognosDemo` with `DimProduct` (6 rows), `DimDate` (6 rows), and `FactSales`
+(12 rows).
+
+### 2. Migrate the report and wire it to local SQL
+
+```powershell
+cognos2pbi migrate examples/complex_sales_report.xml --out out/ComplexDemo `
+  --source-type sqlserver --server localhost --database CognosDemo --schema dbo
+```
+
+Expected summary: 3 tables, 6 measures, 3 pages, 0 items to review. The generated model uses
+`Server` and `Database` parameters and a `Sql.Database(Server, Database)` partition per table.
+
+### 3. Open and refresh in Power BI Desktop
+
+1. Open `out/ComplexDemo/complex_sales_report.pbip` in Power BI Desktop.
+2. If prompted, confirm the `Server` (`localhost`) and `Database` (`CognosDemo`) parameters.
+3. Refresh. The measures evaluate against live data, for example:
+
+   | Total Revenue | Gross Profit | Net Revenue | Avg Unit Price | Total Quantity |
+   | --- | --- | --- | --- | --- |
+   | 1,751,000.00 | 663,000.00 | 1,663,450.00 | 741.67 | 3,810 |
+
+To point at a different server, change `--server` / `--database`, or edit the `Server` and
+`Database` parameters in Power BI Desktop after opening the project.
+
 ## AI-assisted refinement (optional)
 
 Enable an AI provider to translate complex Cognos expressions and layouts into Power BI DAX and

@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Complex Cognos Analytics report specification used for the end-to-end demo.
+
+  It exercises:
+    - Multiple queries that become separate semantic-model tables (FactSales, DimProduct, DimDate).
+    - Typed data items (integer / decimal / string) that become typed TMDL columns.
+    - Several aggregate measures, including arithmetic expressions that are translated to DAX.
+    - Multiple report pages with list, crosstab, column, line and pie visuals.
+
+  The data items line up with the CognosDemo SQL Server database created by
+  examples/sql/setup_demo_db.sql so the generated Power BI Project refreshes against local SQL.
+-->
+<report xmlns="http://developer.cognos.com/schemas/report/16.2/" expressionLocale="en-us">
+  <queries>
+    <query name="FactSales">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="OrderYear" aggregate="none" datatype="integer">
+          <expression>[Sales].[FactSales].[OrderYear]</expression>
+        </dataItem>
+        <dataItem name="OrderMonth" aggregate="none" datatype="integer">
+          <expression>[Sales].[FactSales].[OrderMonth]</expression>
+        </dataItem>
+        <dataItem name="ProductKey" aggregate="none" datatype="integer">
+          <expression>[Sales].[FactSales].[ProductKey]</expression>
+        </dataItem>
+        <dataItem name="Region" aggregate="none" datatype="string">
+          <expression>[Sales].[FactSales].[Region]</expression>
+        </dataItem>
+        <dataItem name="Revenue" aggregate="none" datatype="decimal">
+          <expression>[Sales].[FactSales].[Revenue]</expression>
+        </dataItem>
+        <dataItem name="Cost" aggregate="none" datatype="decimal">
+          <expression>[Sales].[FactSales].[Cost]</expression>
+        </dataItem>
+        <dataItem name="Quantity" aggregate="none" datatype="integer">
+          <expression>[Sales].[FactSales].[Quantity]</expression>
+        </dataItem>
+        <dataItem name="Price" aggregate="none" datatype="decimal">
+          <expression>[Sales].[FactSales].[Price]</expression>
+        </dataItem>
+        <dataItem name="Discount" aggregate="none" datatype="decimal">
+          <expression>[Sales].[FactSales].[Discount]</expression>
+        </dataItem>
+        <dataItem name="Total Revenue" aggregate="total" datatype="decimal">
+          <expression>[Sales].[FactSales].[Revenue]</expression>
+        </dataItem>
+        <dataItem name="Total Cost" aggregate="total" datatype="decimal">
+          <expression>[Sales].[FactSales].[Cost]</expression>
+        </dataItem>
+        <dataItem name="Total Quantity" aggregate="total" datatype="integer">
+          <expression>[Sales].[FactSales].[Quantity]</expression>
+        </dataItem>
+        <dataItem name="Gross Profit" aggregate="total" datatype="decimal">
+          <expression>[Sales].[FactSales].[Revenue] - [Sales].[FactSales].[Cost]</expression>
+        </dataItem>
+        <dataItem name="Net Revenue" aggregate="total" datatype="decimal">
+          <expression>[Sales].[FactSales].[Revenue] - [Sales].[FactSales].[Discount]</expression>
+        </dataItem>
+        <dataItem name="Avg Unit Price" aggregate="average" datatype="decimal">
+          <expression>[Sales].[FactSales].[Price]</expression>
+        </dataItem>
+      </selection>
+    </query>
+    <query name="DimProduct">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="ProductKey" aggregate="none" datatype="integer">
+          <expression>[Sales].[DimProduct].[ProductKey]</expression>
+        </dataItem>
+        <dataItem name="ProductName" aggregate="none" datatype="string">
+          <expression>[Sales].[DimProduct].[ProductName]</expression>
+        </dataItem>
+        <dataItem name="ProductLine" aggregate="none" datatype="string">
+          <expression>[Sales].[DimProduct].[ProductLine]</expression>
+        </dataItem>
+        <dataItem name="Category" aggregate="none" datatype="string">
+          <expression>[Sales].[DimProduct].[Category]</expression>
+        </dataItem>
+      </selection>
+    </query>
+    <query name="DimDate">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="DateKey" aggregate="none" datatype="integer">
+          <expression>[Sales].[DimDate].[DateKey]</expression>
+        </dataItem>
+        <dataItem name="OrderYear" aggregate="none" datatype="integer">
+          <expression>[Sales].[DimDate].[OrderYear]</expression>
+        </dataItem>
+        <dataItem name="OrderMonth" aggregate="none" datatype="integer">
+          <expression>[Sales].[DimDate].[OrderMonth]</expression>
+        </dataItem>
+        <dataItem name="MonthName" aggregate="none" datatype="string">
+          <expression>[Sales].[DimDate].[MonthName]</expression>
+        </dataItem>
+        <dataItem name="Quarter" aggregate="none" datatype="string">
+          <expression>[Sales].[DimDate].[Quarter]</expression>
+        </dataItem>
+      </selection>
+    </query>
+  </queries>
+  <layouts>
+    <layout>
+      <reportPages>
+        <page name="Revenue Overview">
+          <pageBody>
+            <contents>
+              <list refQuery="FactSales" name="SalesDetail"/>
+              <vizColumn refQuery="FactSales" name="RevenueByRegion"/>
+            </contents>
+          </pageBody>
+        </page>
+        <page name="Product Analysis">
+          <pageBody>
+            <contents>
+              <crosstab refQuery="DimProduct" name="ProductMatrix"/>
+              <vizPie refQuery="DimProduct" name="RevenueByLine"/>
+            </contents>
+          </pageBody>
+        </page>
+        <page name="Trend">
+          <pageBody>
+            <contents>
+              <vizLine refQuery="DimDate" name="MonthlyTrend"/>
+              <list refQuery="DimDate" name="CalendarDetail"/>
+            </contents>
+          </pageBody>
+        </page>
+      </reportPages>
+    </layout>
+  </layouts>
+</report>
