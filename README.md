@@ -49,7 +49,8 @@ to the Power BI / Microsoft Fabric service.
 
 The star-schema modeling pass classifies fact, dimension, and date tables, hides foreign keys,
 resolves role-playing dimensions and ambiguous filter loops, and flags many-to-many and snowflake
-joins for review. Disable it with `--no-infer-model`.
+joins for review. Disable it with `--no-infer-model`. See [data modeling](docs/data-modeling.md)
+for the full behavior and edge-case handling.
 
 See the [migration coverage matrix](docs/coverage.md) for detail on expressions, filters, and
 visual types.
