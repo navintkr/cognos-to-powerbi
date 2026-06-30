@@ -173,11 +173,11 @@ need manual review. See [docs/ai-providers.md](docs/ai-providers.md).
 
 ```mermaid
 flowchart LR
-    A[Cognos artifacts<br/>report XML, FM model, data module] --> B[Parsers]
-    B --> C[Intermediate Representation<br/>vendor-neutral IR]
-    C --> D[PBIP Generators<br/>TMDL + PBIR]
-    D --> E[AI Refinement<br/>Claude / Copilot / Codex]
-    E --> F[Power BI Project<br/>.pbip]
+    A["Cognos artifacts<br/>report XML, FM model, data module, dashboard"] --> B["Parsers"]
+    B --> C["Intermediate Representation<br/>vendor-neutral IR"]
+    C --> D["PBIP Generators<br/>TMDL and PBIR"]
+    D --> E["AI Refinement<br/>Claude, Copilot, Codex"]
+    E --> F["Power BI Project<br/>.pbip"]
 ```
 
 The intermediate representation decouples parsing from generation, so new Cognos inputs and new
