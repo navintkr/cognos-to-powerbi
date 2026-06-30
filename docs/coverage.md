@@ -35,8 +35,31 @@ welcome.
 | Role-playing dimensions | Inactive relationship + USERELATIONSHIP guidance | Available |
 | Ambiguous loops / many-to-many / snowflake / self-join | Detected and flagged for review | Available |
 | Composite-key joins | First key pair used, flagged for review | Partial |
-| Data Module | TMDL semantic model | Planned |
-| Calculations | DAX measures / columns | Planned |
+| Data module (.module JSON) | TMDL semantic model | Available |
+| Data module facts | Columns with summarizeBy (sum/avg/min/max/count) | Available |
+| Data module identifiers | Key columns | Available |
+| Data module calculations | Physical column, flagged for review | Partial |
+
+## Dashboards
+
+| Cognos construct | Power BI target | Status |
+| --- | --- | --- |
+| Dashboard / exploration | PBIR report | Available |
+| Tabs | Report pages | Available |
+| Column / bar / line / pie / list / crosstab widget | Corresponding Power BI visual | Available |
+| Widget data items | Visual fields with synthesized tables | Available |
+| Slot mapping (categories, values, series) | Visual field roles | Available |
+| Text / image / media widgets | Skipped (no data binding) | Partial |
+
+## Batch and portal
+
+| Capability | Status |
+| --- | --- |
+| Auto-detect source kind (report, model, module, dashboard) | Available |
+| Batch / folder migration | Available |
+| Coverage report (Markdown and JSON) | Available |
+| SaaS portal upload, analyze, review flags, download | Available |
+| SaaS portal batch upload (zip download) | Available |
 
 ## Expressions
 

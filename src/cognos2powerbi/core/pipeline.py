@@ -7,14 +7,21 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from cognos2powerbi.core.ai import AiProvider, AiRequest, get_provider
+from cognos2powerbi.core.detect import SourceKind, detect_source_file
 from cognos2powerbi.core.generators import generate_pbip
 from cognos2powerbi.core.ir.models import (
     DataSource,
     MigrationProject,
+    ReviewFlag,
     Severity,
 )
 from cognos2powerbi.core.modeling import ModelingSummary, analyze_model
-from cognos2powerbi.core.parsers import parse_model, parse_report
+from cognos2powerbi.core.parsers import (
+    parse_dashboard,
+    parse_data_module,
+    parse_model,
+    parse_report,
+)
 
 
 class MigrationResult(BaseModel):
@@ -28,11 +35,13 @@ class MigrationResult(BaseModel):
     review_flag_count: int
     ai_provider: str
     ai_refinements: int
+    source_kind: str = "report"
     fact_table_count: int = 0
     dimension_table_count: int = 0
     date_table_count: int = 0
     relationship_count: int = 0
     inactive_relationship_count: int = 0
+    review_flags: list[ReviewFlag] = []
 
 
 def _refine_with_ai(project: MigrationProject, provider: AiProvider) -> int:
@@ -86,6 +95,28 @@ def _refine_with_ai(project: MigrationProject, provider: AiProvider) -> int:
     return refined
 
 
+def _run(
+    project: MigrationProject,
+    out_dir: str | Path,
+    ai: str | None,
+    data_source: DataSource | None,
+    infer_model: bool,
+    source_kind: str,
+) -> MigrationResult:
+    """Shared migration tail: model inference, AI refinement, and generation."""
+    if data_source is not None:
+        project.data_source = data_source
+    summary = analyze_model(project) if infer_model else None
+    provider = get_provider(ai)
+    refinements = _refine_with_ai(project, provider)
+    pbip_path = generate_pbip(project, out_dir)
+
+    measure_count = sum(len(table.measures) for table in project.tables)
+    return _build_result(
+        project, pbip_path, measure_count, provider.name, refinements, summary, source_kind
+    )
+
+
 def run_migration(
     source: str | Path,
     out_dir: str | Path,
@@ -106,15 +137,7 @@ def run_migration(
         A :class:`MigrationResult` summarizing the migration.
     """
     project = parse_report(source)
-    if data_source is not None:
-        project.data_source = data_source
-    summary = analyze_model(project) if infer_model else None
-    provider = get_provider(ai)
-    refinements = _refine_with_ai(project, provider)
-    pbip_path = generate_pbip(project, out_dir)
-
-    measure_count = sum(len(table.measures) for table in project.tables)
-    return _build_result(project, pbip_path, measure_count, provider.name, refinements, summary)
+    return _run(project, out_dir, ai, data_source, infer_model, SourceKind.REPORT.value)
 
 
 def run_model_migration(
@@ -137,15 +160,83 @@ def run_model_migration(
         A :class:`MigrationResult` summarizing the migration.
     """
     project = parse_model(source)
-    if data_source is not None:
-        project.data_source = data_source
-    summary = analyze_model(project) if infer_model else None
-    provider = get_provider(ai)
-    refinements = _refine_with_ai(project, provider)
-    pbip_path = generate_pbip(project, out_dir)
+    return _run(project, out_dir, ai, data_source, infer_model, SourceKind.FM_MODEL.value)
 
-    measure_count = sum(len(table.measures) for table in project.tables)
-    return _build_result(project, pbip_path, measure_count, provider.name, refinements, summary)
+
+def run_module_migration(
+    source: str | Path,
+    out_dir: str | Path,
+    ai: str | None = None,
+    data_source: DataSource | None = None,
+    infer_model: bool = True,
+) -> MigrationResult:
+    """Run the migration for a single Cognos data module (``.module`` JSON).
+
+    Args:
+        source: Path to the Cognos data module JSON.
+        out_dir: Directory to write the Power BI Project into.
+        ai: AI provider name (``claude``, ``copilot``, ``codex``, or ``none``).
+        data_source: Optional physical data source used for generated Power Query partitions.
+        infer_model: Run the star-schema modeling pass (classify tables, infer relationships).
+
+    Returns:
+        A :class:`MigrationResult` summarizing the migration.
+    """
+    project = parse_data_module(source)
+    return _run(project, out_dir, ai, data_source, infer_model, SourceKind.DATA_MODULE.value)
+
+
+def run_dashboard_migration(
+    source: str | Path,
+    out_dir: str | Path,
+    ai: str | None = None,
+    data_source: DataSource | None = None,
+    infer_model: bool = True,
+) -> MigrationResult:
+    """Run the migration for a single Cognos dashboard (JSON) into PBIR report pages.
+
+    Args:
+        source: Path to the Cognos dashboard JSON.
+        out_dir: Directory to write the Power BI Project into.
+        ai: AI provider name (``claude``, ``copilot``, ``codex``, or ``none``).
+        data_source: Optional physical data source used for generated Power Query partitions.
+        infer_model: Run the star-schema modeling pass on the synthesized tables.
+
+    Returns:
+        A :class:`MigrationResult` summarizing the migration.
+    """
+    project = parse_dashboard(source)
+    return _run(project, out_dir, ai, data_source, infer_model, SourceKind.DASHBOARD.value)
+
+
+_KIND_RUNNERS = {
+    SourceKind.REPORT: run_migration,
+    SourceKind.FM_MODEL: run_model_migration,
+    SourceKind.DATA_MODULE: run_module_migration,
+    SourceKind.DASHBOARD: run_dashboard_migration,
+}
+
+
+def run_auto_migration(
+    source: str | Path,
+    out_dir: str | Path,
+    ai: str | None = None,
+    data_source: DataSource | None = None,
+    infer_model: bool = True,
+) -> MigrationResult:
+    """Detect the Cognos source kind and run the matching migration.
+
+    Raises:
+        ValueError: If the source kind cannot be determined.
+    """
+    kind = detect_source_file(source)
+    runner = _KIND_RUNNERS.get(kind)
+    if runner is None:
+        raise ValueError(
+            f"Could not determine the Cognos source kind for '{source}'. "
+            "Use a specific command (migrate, migrate-model, migrate-module, migrate-dashboard)."
+        )
+    return runner(source, out_dir, ai=ai, data_source=data_source, infer_model=infer_model)
 
 
 def _build_result(
@@ -155,6 +246,7 @@ def _build_result(
     provider_name: str,
     refinements: int,
     summary: ModelingSummary | None,
+    source_kind: str,
 ) -> MigrationResult:
     return MigrationResult(
         project_name=project.name,
@@ -165,9 +257,11 @@ def _build_result(
         review_flag_count=len(project.review_flags),
         ai_provider=provider_name,
         ai_refinements=refinements,
+        source_kind=source_kind,
         fact_table_count=summary.fact_tables if summary else 0,
         dimension_table_count=summary.dimension_tables if summary else 0,
         date_table_count=summary.date_tables if summary else 0,
         relationship_count=len(project.relationships),
         inactive_relationship_count=summary.inactive_relationships if summary else 0,
+        review_flags=list(project.review_flags),
     )

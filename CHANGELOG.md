@@ -7,6 +7,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-30
+
+### Added
+
+- Data module conversion: parses Cognos Analytics `.module` JSON into a TMDL semantic model, with
+  identifier columns marked as keys, fact items given a summarize-by aggregation, calculations
+  flagged for review, and relationships oriented from the many side. New `migrate-module` command.
+- Dashboard conversion: parses Cognos dashboards and explorations into PBIR report pages, mapping
+  column, bar, line, pie, list, and crosstab widgets to Power BI visuals, synthesizing the tables
+  and columns the visuals reference, and translating slot mappings into field roles. New
+  `migrate-dashboard` command.
+- Source-kind auto-detection (report, model, data module, dashboard) by content with a filename
+  extension fallback.
+- Batch and folder migration: converts many mixed sources in one pass, each into its own project
+  subfolder, and writes a consolidated coverage report (`COVERAGE_REPORT.md` and `coverage.json`).
+  New `migrate-batch` command.
+- SaaS portal updates: auto-detect and a source-kind selector on the web UI; review items rendered
+  as a table; `/api/v1/migrate` and `/api/v1/analyze` accept a `kind` field; new `/api/v1/batch`
+  endpoint returns a zip of all projects plus the coverage report.
+- Example sources: `examples/sample_data_module.json` and `examples/sample_dashboard.json`.
+
 ## [0.2.0] - 2026-06-30
 
 ### Added

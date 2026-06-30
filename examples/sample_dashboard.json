@@ -1,0 +1,58 @@
+{
+  "label": "Sales Dashboard",
+  "widgets": {
+    "w1": {
+      "id": "w1",
+      "type": "live",
+      "name": "column",
+      "data": {
+        "dataViews": [
+          {
+            "dataItems": [
+              { "id": "di1", "itemId": "[Sales].[Order Year]" },
+              { "id": "di2", "itemId": "[Sales].[Revenue]" }
+            ]
+          }
+        ]
+      },
+      "slotmapping": {
+        "slots": [
+          { "name": "categories", "dataItems": ["di1"] },
+          { "name": "values", "dataItems": ["di2"] }
+        ]
+      }
+    },
+    "w2": {
+      "id": "w2",
+      "type": "live",
+      "name": "list",
+      "data": {
+        "dataViews": [
+          {
+            "dataItems": [
+              { "id": "di3", "itemId": "[Product].[Product Name]" },
+              { "id": "di4", "itemId": "[Sales].[Revenue]" }
+            ]
+          }
+        ]
+      },
+      "slotmapping": {
+        "slots": [{ "name": "columns", "dataItems": ["di3", "di4"] }]
+      }
+    },
+    "w3": {
+      "id": "w3",
+      "type": "text",
+      "name": "text",
+      "text": "Quarterly sales overview"
+    }
+  },
+  "layout": {
+    "name": "Overview",
+    "items": [
+      { "id": "w1", "style": { "left": "2%", "top": "2%", "width": "48%", "height": "45%" } },
+      { "id": "w2", "style": { "left": "52%", "top": "2%", "width": "46%", "height": "45%" } },
+      { "id": "w3", "style": { "left": "2%", "top": "50%", "width": "96%", "height": "10%" } }
+    ]
+  }
+}

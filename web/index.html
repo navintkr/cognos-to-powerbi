@@ -6,7 +6,7 @@
     <title>Cognos to Power BI Migration</title>
     <meta
       name="description"
-      content="Convert IBM Cognos reports and Framework Manager models to Microsoft Power BI (PBIP, TMDL, PBIR). Upload a report, run the migration, download a Power BI Project."
+      content="Convert IBM Cognos reports, Framework Manager models, data modules, and dashboards to Microsoft Power BI (PBIP, TMDL, PBIR). Upload a source, run the migration, download a Power BI Project."
     />
     <link rel="stylesheet" href="/app/styles.css" />
   </head>
@@ -16,20 +16,36 @@
         <p class="eyebrow">Open source migration tooling</p>
         <h1>Cognos to Power BI</h1>
         <p class="lede">
-          Convert IBM Cognos reports and Framework Manager models into a refreshable Microsoft
-          Power BI Project. Upload a report specification, choose an optional AI provider, and
-          download a PBIP folder with TMDL semantic model and PBIR report definitions.
+          Convert IBM Cognos reports, Framework Manager models, data modules, and dashboards into a
+          refreshable Microsoft Power BI Project. Upload a source artifact, choose an optional AI
+          provider, and download a PBIP folder with TMDL semantic model and PBIR report definitions.
         </p>
       </div>
     </header>
 
     <main class="container">
       <section class="panel" aria-labelledby="upload-heading">
-        <h2 id="upload-heading">Migrate a report</h2>
+        <h2 id="upload-heading">Migrate a source</h2>
         <form id="migrate-form">
           <div class="field">
-            <label for="file">Cognos report specification (XML)</label>
-            <input id="file" name="file" type="file" accept=".xml" required />
+            <label for="file">Cognos source (report XML, model, data module, or dashboard)</label>
+            <input
+              id="file"
+              name="file"
+              type="file"
+              accept=".xml,.json,.module,.dashboard,.exploration,.spec,.cpf,.fm"
+              required
+            />
+          </div>
+          <div class="field">
+            <label for="kind">Source kind</label>
+            <select id="kind" name="kind">
+              <option value="auto" selected>Auto detect</option>
+              <option value="report">Report</option>
+              <option value="model">Framework Manager model</option>
+              <option value="module">Data module</option>
+              <option value="dashboard">Dashboard</option>
+            </select>
           </div>
           <div class="field">
             <label for="ai">AI refinement provider</label>
@@ -46,7 +62,13 @@
           </div>
         </form>
         <p id="status" class="status" role="status" aria-live="polite"></p>
+        <div id="flags" class="flags" hidden></div>
         <pre id="summary" class="summary" hidden></pre>
+        <p class="note">
+          Need to convert a whole folder at once? Use the command line: <code>cognos2pbi
+          migrate-batch ./sources --out ./out</code> produces one project per source plus a
+          consolidated coverage report.
+        </p>
       </section>
 
       <section class="panel" aria-labelledby="how-heading">

@@ -11,8 +11,15 @@ from rich.table import Table as RichTable
 
 from cognos2powerbi import __version__
 from cognos2powerbi.core.ai import get_provider
+from cognos2powerbi.core.batch import BatchResult, collect_sources, run_batch_migration
 from cognos2powerbi.core.ir.models import DataSource, DataSourceKind
-from cognos2powerbi.core.pipeline import MigrationResult, run_migration, run_model_migration
+from cognos2powerbi.core.pipeline import (
+    MigrationResult,
+    run_dashboard_migration,
+    run_migration,
+    run_model_migration,
+    run_module_migration,
+)
 
 console = Console()
 
@@ -66,6 +73,7 @@ def _build_data_source(
 def _print_summary(result: MigrationResult, out_dir: Path) -> None:
     summary = RichTable(show_header=False, box=None, pad_edge=False)
     summary.add_row("Project", result.project_name)
+    summary.add_row("Source kind", result.source_kind)
     summary.add_row("PBIP", result.pbip_path)
     summary.add_row("Tables", str(result.table_count))
     summary.add_row(
@@ -173,6 +181,184 @@ def migrate_model(
         source, out_dir, ai=ai, data_source=data_source, infer_model=infer_model
     )
     _print_summary(result, out_dir)
+
+
+@cli.command(name="migrate-module")
+@click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--out",
+    "out_dir",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Output directory for the generated Power BI Project.",
+)
+@click.option(
+    "--ai",
+    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
+    default="none",
+    show_default=True,
+    help="AI provider used to refine expressions that have no deterministic mapping.",
+)
+@_SOURCE_TYPE_OPTION
+@_SERVER_OPTION
+@_DATABASE_OPTION
+@_SCHEMA_OPTION
+@_INFER_MODEL_OPTION
+def migrate_module(
+    source: Path,
+    out_dir: Path,
+    ai: str,
+    source_type: str,
+    server: str,
+    database: str,
+    schema_name: str,
+    infer_model: bool,
+) -> None:
+    """Migrate a Cognos data module (.module JSON) to a Power BI semantic model."""
+    console.print(f"[bold]Migrating data module[/bold] {source}")
+    data_source = _build_data_source(source_type, server, database, schema_name)
+    result = run_module_migration(
+        source, out_dir, ai=ai, data_source=data_source, infer_model=infer_model
+    )
+    _print_summary(result, out_dir)
+
+
+@cli.command(name="migrate-dashboard")
+@click.argument("source", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--out",
+    "out_dir",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Output directory for the generated Power BI Project.",
+)
+@click.option(
+    "--ai",
+    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
+    default="none",
+    show_default=True,
+    help="AI provider used to refine expressions that have no deterministic mapping.",
+)
+@_SOURCE_TYPE_OPTION
+@_SERVER_OPTION
+@_DATABASE_OPTION
+@_SCHEMA_OPTION
+@_INFER_MODEL_OPTION
+def migrate_dashboard(
+    source: Path,
+    out_dir: Path,
+    ai: str,
+    source_type: str,
+    server: str,
+    database: str,
+    schema_name: str,
+    infer_model: bool,
+) -> None:
+    """Migrate a Cognos dashboard (JSON) to Power BI report pages."""
+    console.print(f"[bold]Migrating dashboard[/bold] {source}")
+    data_source = _build_data_source(source_type, server, database, schema_name)
+    result = run_dashboard_migration(
+        source, out_dir, ai=ai, data_source=data_source, infer_model=infer_model
+    )
+    _print_summary(result, out_dir)
+
+
+@cli.command(name="migrate-batch")
+@click.argument(
+    "sources",
+    nargs=-1,
+    required=True,
+    type=click.Path(exists=True, path_type=Path),
+)
+@click.option(
+    "--out",
+    "out_dir",
+    required=True,
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Output directory for the generated Power BI Projects and coverage report.",
+)
+@click.option(
+    "--ai",
+    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
+    default="none",
+    show_default=True,
+    help="AI provider used to refine expressions that have no deterministic mapping.",
+)
+@click.option(
+    "--recursive/--no-recursive",
+    default=True,
+    show_default=True,
+    help="When a folder is given, scan it recursively for Cognos sources.",
+)
+@_SOURCE_TYPE_OPTION
+@_SERVER_OPTION
+@_DATABASE_OPTION
+@_SCHEMA_OPTION
+@_INFER_MODEL_OPTION
+def migrate_batch(
+    sources: tuple[Path, ...],
+    out_dir: Path,
+    ai: str,
+    recursive: bool,
+    source_type: str,
+    server: str,
+    database: str,
+    schema_name: str,
+    infer_model: bool,
+) -> None:
+    """Migrate many Cognos sources (files and/or folders) with a coverage report.
+
+    Each source is auto-detected (report, model, data module, or dashboard) and written to its own
+    subfolder. A consolidated COVERAGE_REPORT.md is written to the output directory.
+    """
+    files: list[Path] = []
+    for entry in sources:
+        if entry.is_dir():
+            files.extend(collect_sources(entry, recursive=recursive))
+        else:
+            files.append(entry)
+    if not files:
+        console.print("[yellow]No Cognos source files were found.[/yellow]")
+        raise SystemExit(1)
+
+    console.print(f"[bold]Migrating[/bold] {len(files)} source file(s)")
+    data_source = _build_data_source(source_type, server, database, schema_name)
+    batch = run_batch_migration(
+        [str(path) for path in files],
+        out_dir,
+        ai=ai,
+        data_source=data_source,
+        infer_model=infer_model,
+    )
+    _print_batch_summary(batch)
+
+
+def _print_batch_summary(batch: BatchResult) -> None:
+    table = RichTable(title="Batch migration")
+    table.add_column("Status")
+    table.add_column("Source")
+    table.add_column("Kind")
+    table.add_column("Tables", justify="right")
+    table.add_column("Measures", justify="right")
+    table.add_column("Pages", justify="right")
+    table.add_column("Review", justify="right")
+    for item in batch.items:
+        status = "[green]ok[/green]" if item.status == "ok" else "[red]FAILED[/red]"
+        table.add_row(
+            status,
+            Path(item.source).name,
+            item.kind,
+            str(item.table_count),
+            str(item.measure_count),
+            str(item.page_count),
+            str(item.review_flag_count),
+        )
+    console.print(table)
+    console.print(
+        f"[bold]{batch.succeeded}[/bold] succeeded, "
+        f"[bold]{batch.failed}[/bold] failed. Coverage report: {batch.coverage_report}"
+    )
+    console.print("[green]Done.[/green]")
 
 
 @cli.command()

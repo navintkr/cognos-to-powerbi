@@ -1,0 +1,54 @@
+{
+  "label": "Sales Analysis",
+  "querySubject": [
+    {
+      "label": "Sales",
+      "item": [
+        { "queryItem": { "label": "Sales ID", "datatype": "INTEGER", "usage": "identifier" } },
+        { "queryItem": { "label": "Product ID", "datatype": "INTEGER", "usage": "identifier" } },
+        { "queryItem": { "label": "Order Year", "datatype": "INTEGER", "usage": "attribute" } },
+        {
+          "queryItem": {
+            "label": "Revenue",
+            "datatype": "DECIMAL(18,2)",
+            "usage": "fact",
+            "regularAggregate": "total"
+          }
+        },
+        {
+          "queryItem": {
+            "label": "Quantity",
+            "datatype": "INTEGER",
+            "usage": "fact",
+            "regularAggregate": "total"
+          }
+        },
+        {
+          "queryItem": {
+            "label": "Average Price",
+            "datatype": "DECIMAL(18,2)",
+            "usage": "fact",
+            "regularAggregate": "average",
+            "expression": "[Sales].[Revenue] / [Sales].[Quantity]"
+          }
+        }
+      ]
+    },
+    {
+      "label": "Product",
+      "item": [
+        { "queryItem": { "label": "Product ID", "datatype": "INTEGER", "usage": "identifier" } },
+        { "queryItem": { "label": "Product Name", "datatype": "NVARCHAR(100)", "usage": "attribute" } },
+        { "queryItem": { "label": "Category", "datatype": "NVARCHAR(50)", "usage": "attribute" } }
+      ]
+    }
+  ],
+  "relationship": [
+    {
+      "label": "Sales to Product",
+      "left": { "ref": "[Sales]", "maxcard": "many", "mincard": "zero" },
+      "right": { "ref": "[Product]", "maxcard": "one", "mincard": "one" },
+      "link": [{ "leftRef": "[Sales].[Product ID]", "rightRef": "[Product].[Product ID]" }]
+    }
+  ]
+}

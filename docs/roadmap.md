@@ -3,18 +3,18 @@
 The roadmap is organized by milestone. Dates are intentionally omitted; progress is driven by
 contributions and adoption.
 
-## Milestone 1 - Reliable report conversion (current)
+## Shipped
 
 - Namespace-agnostic Cognos report parser.
+- Framework Manager model parser to TMDL with relationship detection.
+- Data module parser to TMDL (query subjects, facts, identifiers, relationships).
+- Dashboard and exploration parser to PBIR report pages.
+- Star-schema modeling (fact and dimension roles, date tables, summarize-by).
 - Deterministic PBIP generation (TMDL + PBIR).
 - Provider-agnostic AI refinement for measures.
 - Review report for unmapped items.
-
-## Milestone 2 - Models
-
-- Framework Manager model parser to TMDL.
-- Data Module parser to TMDL.
-- Relationship detection and generation.
+- SaaS portal: upload, analyze, review flags, and download on the FastAPI backend.
+- Batch and folder migration with a consolidated coverage report (Markdown and JSON).
 
 ## Milestone 3 - Expression translation library
 
@@ -27,10 +27,8 @@ contributions and adoption.
 - Chart property mapping (axes, legends, series).
 - Filters, prompts, and conditional formatting.
 
-## Milestone 5 - SaaS portal
+## Milestone 5 - Team features
 
-- Upload, review, and download workflow on the FastAPI backend.
-- Batch and folder migration with a consolidated coverage report.
 - Authentication, project history, and team workspaces.
 
 ## How to influence the roadmap

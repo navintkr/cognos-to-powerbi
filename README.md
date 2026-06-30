@@ -1,8 +1,8 @@
 # Cognos to Power BI Migration Tool
 
-**Migrate IBM Cognos reports and models to Microsoft Power BI automatically.** An open-source,
-AI-assisted migration engine that converts Cognos report specifications into Power BI Project
-(PBIP) format using TMDL semantic models and PBIR report definitions.
+**Migrate IBM Cognos reports, models, data modules, and dashboards to Microsoft Power BI
+automatically.** An open-source, AI-assisted migration engine that converts Cognos sources into
+Power BI Project (PBIP) format using TMDL semantic models and PBIR report definitions.
 
 [![CI](https://github.com/navintkr/cognos-to-powerbi/actions/workflows/ci.yml/badge.svg)](https://github.com/navintkr/cognos-to-powerbi/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -44,8 +44,9 @@ to the Power BI / Microsoft Fabric service.
 | Queries and data items | TMDL columns and measures | Available (beta) |
 | Framework Manager model (`.cpf` / FM XML) | TMDL semantic model | Available (beta) |
 | Relational joins | Star-schema relationships with cardinality and cross-filter | Available (beta) |
-| Data Modules | TMDL semantic model | Planned |
-| Dashboards | PBIR report pages | Planned |
+| Data modules (`.module` JSON) | TMDL semantic model | Available (beta) |
+| Dashboards and explorations (JSON) | PBIR report pages | Available (beta) |
+| Batch / folder migration | One project per source plus a coverage report | Available (beta) |
 
 The star-schema modeling pass classifies fact, dimension, and date tables, hides foreign keys,
 resolves role-playing dimensions and ambiguous filter loops, and flags many-to-many and snowflake
@@ -73,6 +74,15 @@ cognos2pbi migrate-model ./examples/sample_model.xml --out ./out/SalesModel
 
 # Infer a full star schema (fact/dimension roles, relationships, date tables)
 cognos2pbi migrate-model ./examples/star_schema_model.xml --out ./out/RetailStar
+
+# Convert a Cognos data module to a Power BI semantic model
+cognos2pbi migrate-module ./examples/sample_data_module.json --out ./out/SalesAnalysis
+
+# Convert a Cognos dashboard to a Power BI report
+cognos2pbi migrate-dashboard ./examples/sample_dashboard.json --out ./out/SalesDashboard
+
+# Convert a whole folder of mixed sources, with a coverage report
+cognos2pbi migrate-batch ./examples --out ./out/Batch
 
 # Open the generated project
 #   ./out/SalesReport/SalesReport.pbip   ->  open in Power BI Desktop
@@ -199,7 +209,10 @@ cognos-to-powerbi/
 pip install -e ".[api]"
 uvicorn cognos2powerbi.api.main:app --reload
 # Open the web UI at http://127.0.0.1:8000/
-# Or POST a Cognos report to http://127.0.0.1:8000/api/v1/migrate
+# Auto-detects the source kind (report, model, module, dashboard) on upload.
+#   POST a single source to http://127.0.0.1:8000/api/v1/migrate   (returns a PBIP zip)
+#   POST a single source to http://127.0.0.1:8000/api/v1/analyze   (returns JSON review items)
+#   POST many sources to    http://127.0.0.1:8000/api/v1/batch     (returns a zip + coverage report)
 ```
 
 ## Roadmap
@@ -207,10 +220,10 @@ uvicorn cognos2powerbi.api.main:app --reload
 - [x] Framework Manager model conversion to TMDL
 - [x] Expression translation library (Cognos to DAX)
 - [x] Parameterized data-source wiring for refreshable PBIP
-- [ ] Data Module conversion
-- [ ] Dashboard to PBIR page mapping
-- [ ] Hosted SaaS portal with upload, review, and download
-- [ ] Batch / folder migration with a coverage report
+- [x] Data module conversion
+- [x] Dashboard to PBIR page mapping
+- [x] Hosted SaaS portal with upload, review, and download
+- [x] Batch / folder migration with a coverage report
 
 Full roadmap: [docs/roadmap.md](docs/roadmap.md).
 
