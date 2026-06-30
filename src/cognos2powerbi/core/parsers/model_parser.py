@@ -26,6 +26,7 @@ from cognos2powerbi.core.ir.models import (
     Relationship,
     Severity,
     Table,
+    TableRole,
 )
 
 _REFERENCE = re.compile(r"\[[^\[\]]+\](?:\.\[[^\[\]]+\])+")
@@ -101,19 +102,28 @@ class FrameworkManagerParser:
         for index, subject in enumerate(root.iter("querySubject"), start=1):
             table_name = _name_of(subject, f"QuerySubject{index}")
             table = Table(name=table_name, source_query=table_name)
+            has_fact = False
             for item in subject.iter("queryItem"):
                 column_name = _name_of(item, "Item")
                 data_type_value = _child_text(item, "datatype", "dataType") or item.get("datatype")
                 data_type = (
                     DataType.from_cognos(data_type_value) if data_type_value else DataType.STRING
                 )
+                usage = (_child_text(item, "usage") or item.get("usage") or "").strip().lower()
+                is_key = usage in {"identifier", "_identifier", "key"}
+                if usage in {"fact", "_fact", "measure"}:
+                    has_fact = True
                 table.columns.append(
                     Column(
                         name=column_name,
                         data_type=data_type,
                         source_column=column_name,
+                        is_key=is_key,
+                        summarize_by="none" if is_key else None,
                     )
                 )
+            if has_fact:
+                table.role = TableRole.FACT
             if table.columns:
                 project.tables.append(table)
 
@@ -123,6 +133,7 @@ class FrameworkManagerParser:
             expression = _child_text(relationship, "expression")
             if not expression:
                 continue
+            rel_name = _name_of(relationship, f"Relationship{index}")
             references = _REFERENCE.findall(expression)
             if len(references) < 2:
                 project.add_flag(
@@ -148,12 +159,22 @@ class FrameworkManagerParser:
                     Severity.WARNING,
                     source_ref=expression,
                 )
+            if expression.count("=") > 1:
+                project.add_flag(
+                    "relationship-composite-key",
+                    f"Relationship '{rel_name}' joins on a composite key. Power BI relationships "
+                    "use a single column; the first key pair was used. Add a composite key column "
+                    "if both are required.",
+                    Severity.WARNING,
+                    source_ref=expression,
+                )
             project.relationships.append(
                 Relationship(
                     from_table=from_table,
                     from_column=from_column,
                     to_table=to_table,
                     to_column=to_column,
+                    name=rel_name,
                 )
             )
 

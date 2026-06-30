@@ -28,9 +28,12 @@ import uuid
 from pathlib import Path
 
 from cognos2powerbi.core.ir.models import (
+    Cardinality,
+    CrossFilterDirection,
     DataSource,
     DataSourceKind,
     MigrationProject,
+    Relationship,
     Table,
     Visual,
 )
@@ -107,27 +110,56 @@ class PbipGenerator:
             )
             lines.append("")
         for table in project.tables:
-            lines.append(f"ref table {table.name}")
+            lines.append(f"ref table {_escape_tmdl_name(table.name)}")
         lines.append("")
         for relationship in project.relationships:
-            from_ref = f"{relationship.from_table}.{_escape_tmdl_name(relationship.from_column)}"
-            to_ref = f"{relationship.to_table}.{_escape_tmdl_name(relationship.to_column)}"
-            lines.append(f"relationship {uuid.uuid4()}")
-            if not relationship.is_active:
-                lines.append("\tisActive: false")
-            lines.append(f"\tfromColumn: {from_ref}")
-            lines.append(f"\ttoColumn: {to_ref}")
-            lines.append("")
+            lines.extend(self._render_relationship_tmdl(relationship))
         return "\n".join(lines)
 
+    def _render_relationship_tmdl(self, relationship: Relationship) -> list[str]:
+        from_ref = (
+            f"{_escape_tmdl_name(relationship.from_table)}."
+            f"{_escape_tmdl_name(relationship.from_column)}"
+        )
+        to_ref = (
+            f"{_escape_tmdl_name(relationship.to_table)}."
+            f"{_escape_tmdl_name(relationship.to_column)}"
+        )
+        lines = [f"relationship {uuid.uuid4()}"]
+        if not relationship.is_active:
+            lines.append("\tisActive: false")
+        lines.append(f"\tfromColumn: {from_ref}")
+        lines.append(f"\ttoColumn: {to_ref}")
+        # many-to-one is the Power BI default and needs no explicit cardinality tokens.
+        if relationship.cardinality == Cardinality.MANY_TO_MANY:
+            lines.append("\tfromCardinality: many")
+            lines.append("\ttoCardinality: many")
+        elif relationship.cardinality == Cardinality.ONE_TO_ONE:
+            lines.append("\tfromCardinality: one")
+            lines.append("\ttoCardinality: one")
+        elif relationship.cardinality == Cardinality.ONE_TO_MANY:
+            lines.append("\tfromCardinality: one")
+            lines.append("\ttoCardinality: many")
+        if relationship.cross_filter == CrossFilterDirection.BOTH:
+            lines.append("\tcrossFilteringBehavior: bothDirections")
+        lines.append("")
+        return lines
+
     def _render_table_tmdl(self, table: Table, data_source: DataSource) -> str:
-        lines = [f"table {table.name}", ""]
+        lines = [f"table {_escape_tmdl_name(table.name)}"]
+        if table.data_category:
+            lines.append(f"\tdataCategory: {table.data_category}")
+        lines.append("")
         for column in table.columns:
             lines.append(f"\tcolumn {_escape_tmdl_name(column.name)}")
             lines.append(f"\t\tdataType: {column.data_type.value}")
             lines.append(f"\t\tsourceColumn: {column.source_column or column.name}")
             if column.is_hidden:
                 lines.append("\t\tisHidden")
+            if column.summarize_by:
+                lines.append(f"\t\tsummarizeBy: {column.summarize_by}")
+            if column.data_category:
+                lines.append(f"\t\tdataCategory: {column.data_category}")
             lines.append("")
         for measure in table.measures:
             expression = measure.dax_expression or '"TODO: translate Cognos expression"'

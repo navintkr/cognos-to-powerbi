@@ -13,6 +13,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Cognos report specification parser (beta).
 - Cognos Framework Manager model parser with the `migrate-model` command, producing TMDL tables
   and relationships.
+- Star-schema data modeling: classifies fact, dimension, date, and bridge tables; orients each
+  relationship from the many side to the one side; infers cardinality and cross-filter direction;
+  marks date tables; hides foreign-key columns; and flags ambiguous filter loops, role-playing
+  dimensions, self-referencing hierarchies, many-to-many joins, snowflakes, composite keys, and
+  disconnected tables. Toggle with `--infer-model` / `--no-infer-model`.
+- Broader Cognos-to-TMDL data-type mapping (width-suffixed integers, precision-qualified decimals,
+  additional date and floating-point aliases).
 - Deterministic Cognos-to-DAX expression translation library (references, arithmetic with
   aggregates, if/then/else, case, common string and date functions).
 - Parameterized SQL Server data-source wiring: generated models include `Server` and `Database`

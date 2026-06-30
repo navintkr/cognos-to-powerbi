@@ -29,6 +29,12 @@ welcome.
 | Query subject | Semantic-model table | Available |
 | Query item | Column | Available |
 | Relationships | TMDL relationships | Available |
+| Fact / dimension classification | Table roles (star schema) | Available |
+| Relationship cardinality and cross-filter | TMDL cardinality / crossFilteringBehavior | Available |
+| Date dimension | Date table (dataCategory Time) | Available |
+| Role-playing dimensions | Inactive relationship + USERELATIONSHIP guidance | Available |
+| Ambiguous loops / many-to-many / snowflake / self-join | Detected and flagged for review | Available |
+| Composite-key joins | First key pair used, flagged for review | Partial |
 | Data Module | TMDL semantic model | Planned |
 | Calculations | DAX measures / columns | Planned |
 

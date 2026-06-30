@@ -23,16 +23,18 @@ class DataType(str, Enum):
         if not cognos_type:
             return cls.STRING
         value = cognos_type.strip().lower()
-        if value in {"int", "integer", "bigint", "smallint"}:
-            return cls.INT64
-        if value in {"double", "float", "real", "number"}:
-            return cls.DOUBLE
-        if value in {"decimal", "numeric", "money", "currency"}:
-            return cls.DECIMAL
-        if value in {"bool", "boolean", "bit"}:
-            return cls.BOOLEAN
-        if value in {"date", "datetime", "timestamp", "time"}:
+        # Strip any precision/length suffix, for example "decimal(18,2)" or "varchar(50)".
+        base = value.split("(", 1)[0].strip()
+        if base in {"date", "datetime", "datetime2", "smalldatetime", "timestamp", "time"}:
             return cls.DATE_TIME
+        if base in {"bool", "boolean", "bit"}:
+            return cls.BOOLEAN
+        if base in {"decimal", "numeric", "money", "smallmoney", "currency"}:
+            return cls.DECIMAL
+        if base in {"double", "float", "float64", "real", "number"}:
+            return cls.DOUBLE
+        if "int" in base or base in {"long", "short", "byte", "serial"}:
+            return cls.INT64
         return cls.STRING
 
 
@@ -64,6 +66,36 @@ class DataSourceKind(str, Enum):
     NONE = "none"
 
 
+class TableRole(str, Enum):
+    """The role a table plays in a star schema."""
+
+    FACT = "fact"
+    DIMENSION = "dimension"
+    DATE = "date"
+    BRIDGE = "bridge"
+    UNKNOWN = "unknown"
+
+
+class Cardinality(str, Enum):
+    """Relationship cardinality, named so the value maps onto TMDL endpoints.
+
+    A relationship in TMDL is oriented from the ``from`` (many) side to the ``to`` (one) side.
+    ``MANY_TO_ONE`` is the Power BI default and needs no explicit cardinality tokens.
+    """
+
+    MANY_TO_ONE = "manyToOne"
+    ONE_TO_MANY = "oneToMany"
+    ONE_TO_ONE = "oneToOne"
+    MANY_TO_MANY = "manyToMany"
+
+
+class CrossFilterDirection(str, Enum):
+    """Cross-filter direction for a relationship (TMDL crossFilteringBehavior)."""
+
+    SINGLE = "oneDirection"
+    BOTH = "bothDirections"
+
+
 class ReviewFlag(BaseModel):
     """A migration item that needs human or AI review."""
 
@@ -81,6 +113,10 @@ class Column(BaseModel):
     source_column: str | None = None
     cognos_expression: str | None = None
     is_hidden: bool = False
+    is_key: bool = False
+    is_foreign_key: bool = False
+    summarize_by: str | None = None
+    data_category: str | None = None
 
 
 class Measure(BaseModel):
@@ -100,16 +136,33 @@ class Table(BaseModel):
     source_query: str | None = None
     columns: list[Column] = Field(default_factory=list)
     measures: list[Measure] = Field(default_factory=list)
+    role: TableRole = TableRole.UNKNOWN
+    data_category: str | None = None
+    is_date_table: bool = False
+
+    def column(self, name: str) -> Column | None:
+        """Return the column with the given name, or ``None``."""
+        for col in self.columns:
+            if col.name == name:
+                return col
+        return None
 
 
 class Relationship(BaseModel):
-    """A relationship between two tables."""
+    """A relationship between two tables.
+
+    The relationship is oriented so ``from`` is the many side and ``to`` is the one side,
+    matching how Power BI / TMDL serialize a single-column relationship.
+    """
 
     from_table: str
     from_column: str
     to_table: str
     to_column: str
     is_active: bool = True
+    name: str | None = None
+    cardinality: Cardinality = Cardinality.MANY_TO_ONE
+    cross_filter: CrossFilterDirection = CrossFilterDirection.SINGLE
 
 
 class DataSource(BaseModel):

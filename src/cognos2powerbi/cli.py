@@ -42,6 +42,13 @@ _SCHEMA_OPTION = click.option(
     show_default=True,
     help="Schema used when navigating to tables in the generated Power Query.",
 )
+_INFER_MODEL_OPTION = click.option(
+    "--infer-model/--no-infer-model",
+    "infer_model",
+    default=True,
+    show_default=True,
+    help="Classify fact/dimension tables and infer relationship cardinality (star schema).",
+)
 
 
 def _build_data_source(
@@ -61,6 +68,14 @@ def _print_summary(result: MigrationResult, out_dir: Path) -> None:
     summary.add_row("Project", result.project_name)
     summary.add_row("PBIP", result.pbip_path)
     summary.add_row("Tables", str(result.table_count))
+    summary.add_row(
+        "Facts / Dimensions / Date",
+        f"{result.fact_table_count} / {result.dimension_table_count} / {result.date_table_count}",
+    )
+    summary.add_row(
+        "Relationships",
+        f"{result.relationship_count} ({result.inactive_relationship_count} inactive)",
+    )
     summary.add_row("Measures", str(result.measure_count))
     summary.add_row("Pages", str(result.page_count))
     summary.add_row("AI provider", result.ai_provider)
@@ -102,6 +117,7 @@ def cli() -> None:
 @_SERVER_OPTION
 @_DATABASE_OPTION
 @_SCHEMA_OPTION
+@_INFER_MODEL_OPTION
 def migrate(
     source: Path,
     out_dir: Path,
@@ -110,11 +126,12 @@ def migrate(
     server: str,
     database: str,
     schema_name: str,
+    infer_model: bool,
 ) -> None:
     """Migrate a single Cognos report specification to a Power BI Project."""
     console.print(f"[bold]Migrating[/bold] {source}")
     data_source = _build_data_source(source_type, server, database, schema_name)
-    result = run_migration(source, out_dir, ai=ai, data_source=data_source)
+    result = run_migration(source, out_dir, ai=ai, data_source=data_source, infer_model=infer_model)
     _print_summary(result, out_dir)
 
 
@@ -138,6 +155,7 @@ def migrate(
 @_SERVER_OPTION
 @_DATABASE_OPTION
 @_SCHEMA_OPTION
+@_INFER_MODEL_OPTION
 def migrate_model(
     source: Path,
     out_dir: Path,
@@ -146,11 +164,14 @@ def migrate_model(
     server: str,
     database: str,
     schema_name: str,
+    infer_model: bool,
 ) -> None:
     """Migrate a Cognos Framework Manager model to a Power BI semantic model."""
     console.print(f"[bold]Migrating model[/bold] {source}")
     data_source = _build_data_source(source_type, server, database, schema_name)
-    result = run_model_migration(source, out_dir, ai=ai, data_source=data_source)
+    result = run_model_migration(
+        source, out_dir, ai=ai, data_source=data_source, infer_model=infer_model
+    )
     _print_summary(result, out_dir)
 
 

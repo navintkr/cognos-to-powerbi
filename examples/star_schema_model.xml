@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  A Framework Manager model that exercises the star-schema modeling pass:
+  one fact table, several dimensions, a snowflake (Product -> Category), a date
+  dimension, and a role-playing dimension (two date relationships from the fact).
+-->
+<project xmlns="http://www.developer.cognos.com/schemas/bmt/60/12">
+  <name>Retail Star</name>
+  <namespace>
+    <name>model</name>
+
+    <querySubject>
+      <name>FactSales</name>
+      <queryItem>
+        <name>SalesID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>ProductID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>CustomerID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>OrderDateKey</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>ShipDateKey</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>Revenue</name>
+        <datatype>decimal</datatype>
+        <usage>fact</usage>
+      </queryItem>
+      <queryItem>
+        <name>Quantity</name>
+        <datatype>int32</datatype>
+        <usage>fact</usage>
+      </queryItem>
+    </querySubject>
+
+    <querySubject>
+      <name>DimProduct</name>
+      <queryItem>
+        <name>ProductID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>ProductName</name>
+        <datatype>nvarchar</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+      <queryItem>
+        <name>CategoryID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+    </querySubject>
+
+    <querySubject>
+      <name>DimCategory</name>
+      <queryItem>
+        <name>CategoryID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>CategoryName</name>
+        <datatype>nvarchar</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+    </querySubject>
+
+    <querySubject>
+      <name>DimCustomer</name>
+      <queryItem>
+        <name>CustomerID</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>CustomerName</name>
+        <datatype>nvarchar</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+    </querySubject>
+
+    <querySubject>
+      <name>DimDate</name>
+      <queryItem>
+        <name>DateKey</name>
+        <datatype>int32</datatype>
+        <usage>identifier</usage>
+      </queryItem>
+      <queryItem>
+        <name>Date</name>
+        <datatype>datetime</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+      <queryItem>
+        <name>Year</name>
+        <datatype>int32</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+      <queryItem>
+        <name>Month</name>
+        <datatype>int32</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+      <queryItem>
+        <name>Quarter</name>
+        <datatype>int32</datatype>
+        <usage>attribute</usage>
+      </queryItem>
+    </querySubject>
+
+    <relationship>
+      <name>Sales_Product</name>
+      <expression>[model].[FactSales].[ProductID] = [model].[DimProduct].[ProductID]</expression>
+    </relationship>
+    <relationship>
+      <name>Product_Category</name>
+      <expression>[model].[DimProduct].[CategoryID] = [model].[DimCategory].[CategoryID]</expression>
+    </relationship>
+    <relationship>
+      <name>Sales_Customer</name>
+      <expression>[model].[FactSales].[CustomerID] = [model].[DimCustomer].[CustomerID]</expression>
+    </relationship>
+    <relationship>
+      <name>Sales_OrderDate</name>
+      <expression>[model].[FactSales].[OrderDateKey] = [model].[DimDate].[DateKey]</expression>
+    </relationship>
+    <relationship>
+      <name>Sales_ShipDate</name>
+      <expression>[model].[FactSales].[ShipDateKey] = [model].[DimDate].[DateKey]</expression>
+    </relationship>
+  </namespace>
+</project>

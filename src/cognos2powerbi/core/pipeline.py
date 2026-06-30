@@ -13,6 +13,7 @@ from cognos2powerbi.core.ir.models import (
     MigrationProject,
     Severity,
 )
+from cognos2powerbi.core.modeling import ModelingSummary, analyze_model
 from cognos2powerbi.core.parsers import parse_model, parse_report
 
 
@@ -27,6 +28,11 @@ class MigrationResult(BaseModel):
     review_flag_count: int
     ai_provider: str
     ai_refinements: int
+    fact_table_count: int = 0
+    dimension_table_count: int = 0
+    date_table_count: int = 0
+    relationship_count: int = 0
+    inactive_relationship_count: int = 0
 
 
 def _refine_with_ai(project: MigrationProject, provider: AiProvider) -> int:
@@ -85,6 +91,7 @@ def run_migration(
     out_dir: str | Path,
     ai: str | None = None,
     data_source: DataSource | None = None,
+    infer_model: bool = True,
 ) -> MigrationResult:
     """Run the full migration for a single Cognos report specification.
 
@@ -93,6 +100,7 @@ def run_migration(
         out_dir: Directory to write the Power BI Project into.
         ai: AI provider name (``claude``, ``copilot``, ``codex``, or ``none``).
         data_source: Optional physical data source used for generated Power Query partitions.
+        infer_model: Run the star-schema modeling pass (classify tables, infer relationships).
 
     Returns:
         A :class:`MigrationResult` summarizing the migration.
@@ -100,21 +108,13 @@ def run_migration(
     project = parse_report(source)
     if data_source is not None:
         project.data_source = data_source
+    summary = analyze_model(project) if infer_model else None
     provider = get_provider(ai)
     refinements = _refine_with_ai(project, provider)
     pbip_path = generate_pbip(project, out_dir)
 
     measure_count = sum(len(table.measures) for table in project.tables)
-    return MigrationResult(
-        project_name=project.name,
-        pbip_path=str(pbip_path),
-        table_count=len(project.tables),
-        page_count=len(project.pages),
-        measure_count=measure_count,
-        review_flag_count=len(project.review_flags),
-        ai_provider=provider.name,
-        ai_refinements=refinements,
-    )
+    return _build_result(project, pbip_path, measure_count, provider.name, refinements, summary)
 
 
 def run_model_migration(
@@ -122,6 +122,7 @@ def run_model_migration(
     out_dir: str | Path,
     ai: str | None = None,
     data_source: DataSource | None = None,
+    infer_model: bool = True,
 ) -> MigrationResult:
     """Run the migration for a single Cognos Framework Manager model.
 
@@ -130,6 +131,7 @@ def run_model_migration(
         out_dir: Directory to write the Power BI Project into.
         ai: AI provider name (``claude``, ``copilot``, ``codex``, or ``none``).
         data_source: Optional physical data source used for generated Power Query partitions.
+        infer_model: Run the star-schema modeling pass (classify tables, infer relationships).
 
     Returns:
         A :class:`MigrationResult` summarizing the migration.
@@ -137,11 +139,23 @@ def run_model_migration(
     project = parse_model(source)
     if data_source is not None:
         project.data_source = data_source
+    summary = analyze_model(project) if infer_model else None
     provider = get_provider(ai)
     refinements = _refine_with_ai(project, provider)
     pbip_path = generate_pbip(project, out_dir)
 
     measure_count = sum(len(table.measures) for table in project.tables)
+    return _build_result(project, pbip_path, measure_count, provider.name, refinements, summary)
+
+
+def _build_result(
+    project: MigrationProject,
+    pbip_path: Path,
+    measure_count: int,
+    provider_name: str,
+    refinements: int,
+    summary: ModelingSummary | None,
+) -> MigrationResult:
     return MigrationResult(
         project_name=project.name,
         pbip_path=str(pbip_path),
@@ -149,6 +163,11 @@ def run_model_migration(
         page_count=len(project.pages),
         measure_count=measure_count,
         review_flag_count=len(project.review_flags),
-        ai_provider=provider.name,
+        ai_provider=provider_name,
         ai_refinements=refinements,
+        fact_table_count=summary.fact_tables if summary else 0,
+        dimension_table_count=summary.dimension_tables if summary else 0,
+        date_table_count=summary.date_tables if summary else 0,
+        relationship_count=len(project.relationships),
+        inactive_relationship_count=summary.inactive_relationships if summary else 0,
     )

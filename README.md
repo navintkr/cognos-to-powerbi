@@ -18,8 +18,10 @@ error-prone migration. This tool automates the heavy lifting:
 
 1. **Parse** Cognos report specification XML, Framework Manager models, and data modules.
 2. **Normalize** them into a vendor-neutral intermediate representation (IR).
-3. **Generate** Power BI Project (PBIP) output: TMDL semantic models and PBIR reports.
-4. **Refine** the output with an AI assistant (Claude, GitHub Copilot, or Codex) to translate
+3. **Model** the result as a Power BI star schema: classify fact and dimension tables, orient
+   relationships, infer cardinality and cross-filter direction, and mark date tables.
+4. **Generate** Power BI Project (PBIP) output: TMDL semantic models and PBIR reports.
+5. **Refine** the output with an AI assistant (Claude, GitHub Copilot, or Codex) to translate
    expressions, layouts, and visuals that have no direct mechanical mapping.
 
 The result is a Git-friendly Power BI project you can open in Power BI Desktop, review, and deploy
@@ -41,8 +43,13 @@ to the Power BI / Microsoft Fabric service.
 | Report specification (Report Studio XML) | PBIR report + TMDL tables | Available (beta) |
 | Queries and data items | TMDL columns and measures | Available (beta) |
 | Framework Manager model (`.cpf` / FM XML) | TMDL semantic model | Available (beta) |
+| Relational joins | Star-schema relationships with cardinality and cross-filter | Available (beta) |
 | Data Modules | TMDL semantic model | Planned |
 | Dashboards | PBIR report pages | Planned |
+
+The star-schema modeling pass classifies fact, dimension, and date tables, hides foreign keys,
+resolves role-playing dimensions and ambiguous filter loops, and flags many-to-many and snowflake
+joins for review. Disable it with `--no-infer-model`.
 
 See the [migration coverage matrix](docs/coverage.md) for detail on expressions, filters, and
 visual types.
@@ -62,6 +69,9 @@ cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport \
 
 # Convert a Cognos Framework Manager model to a Power BI semantic model
 cognos2pbi migrate-model ./examples/sample_model.xml --out ./out/SalesModel
+
+# Infer a full star schema (fact/dimension roles, relationships, date tables)
+cognos2pbi migrate-model ./examples/star_schema_model.xml --out ./out/RetailStar
 
 # Open the generated project
 #   ./out/SalesReport/SalesReport.pbip   ->  open in Power BI Desktop
