@@ -62,7 +62,7 @@ class PbipGenerator:
 
     def _write_pbip_root(self, root: Path, name: str) -> None:
         pbip = {
-            "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/pbip/1.0.0/schema.json",
+            "$schema": "https://developer.microsoft.com/json-schemas/fabric/pbip/pbipProperties/1.0.0/schema.json",
             "version": "1.0",
             "artifacts": [{"report": {"path": f"{name}.Report"}}],
             "settings": {"enableAutoRecovery": True},

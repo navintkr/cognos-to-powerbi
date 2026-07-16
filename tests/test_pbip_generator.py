@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from cognos2powerbi.core.pipeline import run_migration
@@ -26,6 +27,17 @@ def test_pbip_root_is_valid_json(tmp_path: Path) -> None:
     pbip = json.loads((tmp_path / f"{result.project_name}.pbip").read_text(encoding="utf-8"))
     assert pbip["version"] == "1.0"
     assert pbip["artifacts"][0]["report"]["path"].endswith(".Report")
+
+
+def test_pbip_schema_matches_power_bi_pattern(tmp_path: Path) -> None:
+    # Power BI (June 2026 and later) rejects the .pbip shortcut unless $schema matches this pattern.
+    pattern = (
+        r"^https://developer\.microsoft\.com/json-schemas/fabric/pbip/pbipProperties/"
+        r"1\.[0-9]+\.[0-9]+/schema\.json$"
+    )
+    result = run_migration(EXAMPLE, tmp_path, ai="none")
+    pbip = json.loads((tmp_path / f"{result.project_name}.pbip").read_text(encoding="utf-8"))
+    assert re.match(pattern, pbip["$schema"]) is not None
 
 
 def test_table_tmdl_contains_measure(tmp_path: Path) -> None:

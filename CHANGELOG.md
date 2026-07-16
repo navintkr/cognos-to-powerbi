@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-16
+
+### Fixed
+
+- Corrected the `.pbip` shortcut file `$schema` so Power BI Desktop (June 2026 and later) can open
+  the generated project. The value now matches the required pattern
+  `fabric/pbip/pbipProperties/1.0.0/schema.json`; the previous `fabric/item/pbip/1.0.0` value was
+  rejected with an `UnrecognizedSchemaVersion` error on open.
+
 ## [0.3.0] - 2026-06-30
 
 ### Added

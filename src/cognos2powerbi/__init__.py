@@ -4,4 +4,4 @@ An open-source, AI-assisted tool that converts IBM Cognos reports and models int
 Microsoft Power BI Project (PBIP) format using TMDL semantic models and PBIR reports.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
