@@ -34,8 +34,15 @@ def test_pbip_root_is_valid_json(tmp_path: Path) -> None:
 
 
 def test_pbir_visual_has_query_projections(tmp_path: Path) -> None:
-    result = run_migration(EXAMPLE, tmp_path, ai="none")
-    pages = tmp_path / f"{result.project_name}.Report" / "definition" / "pages"
+    from cognos2powerbi.core.generators.pbip_generator import PbipGenerator
+    from cognos2powerbi.core.parsers import parse_report
+
+    # Visual emission is opt-in while the exact Power BI Desktop visual format is confirmed.
+    project = parse_report(EXAMPLE)
+    generator = PbipGenerator()
+    generator.emit_visuals = True
+    generator.generate(project, tmp_path)
+    pages = tmp_path / f"{project.name}.Report" / "definition" / "pages"
     visual_files = list(pages.glob("*/visuals/*/visual.json"))
     assert visual_files, "expected at least one PBIR visual.json"
     visual = json.loads(visual_files[0].read_text(encoding="utf-8"))
@@ -48,6 +55,15 @@ def test_pbir_visual_has_query_projections(tmp_path: Path) -> None:
     assert container is not None
     assert container["Expression"]["SourceRef"]["Entity"]
     assert container["Property"]
+
+
+def test_pbir_pages_open_without_visuals_by_default(tmp_path: Path) -> None:
+    result = run_migration(EXAMPLE, tmp_path, ai="none")
+    pages = tmp_path / f"{result.project_name}.Report" / "definition" / "pages"
+    page_json = list(pages.glob("*/page.json"))
+    assert page_json, "expected at least one PBIR page.json"
+    # By default no visual.json files are emitted (report opens with an empty canvas).
+    assert not list(pages.glob("*/visuals/*/visual.json"))
 
 
 def test_pbip_schema_matches_power_bi_pattern(tmp_path: Path) -> None:

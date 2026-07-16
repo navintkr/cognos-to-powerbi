@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-07-16
+
+### Changed
+
+- The generated PBIR report now opens with pages and an empty canvas by default (no auto-placed
+  visuals). Auto-placing visuals is being matched to the exact format current Power BI Desktop
+  writes; until that is confirmed, an empty-but-valid report avoids a report-render error while the
+  semantic model remains complete (drag fields onto the canvas to build visuals). Visual emission
+  is available opt-in via `PbipGenerator.emit_visuals = True`.
+
 ## [0.4.2] - 2026-07-16
 
 ### Fixed

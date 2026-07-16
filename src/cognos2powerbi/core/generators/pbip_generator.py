@@ -88,6 +88,11 @@ _CHART_VISUAL_TYPES = {
 class PbipGenerator:
     """Render a migration project to PBIP files on disk."""
 
+    # Auto-placed PBIR visuals are still being matched to the exact format current Power BI Desktop
+    # writes; until then the report opens with pages and an empty canvas (the model is complete and
+    # visuals can be dragged in). Set True to also emit visual.json files.
+    emit_visuals: bool = False
+
     def generate(self, project: MigrationProject, out_dir: str | Path) -> Path:
         root = Path(out_dir)
         name = project.name
@@ -322,6 +327,8 @@ class PbipGenerator:
                 "width": 1280,
             },
         )
+        if not self.emit_visuals:
+            return
         used: set[str] = set()
         for index, visual in enumerate(page.visuals, start=1):
             visual_name = _safe_report_name(
