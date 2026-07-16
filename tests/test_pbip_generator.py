@@ -55,6 +55,40 @@ def test_review_report_written_when_flags_exist(tmp_path: Path) -> None:
     assert (tmp_path / "MIGRATION_REVIEW.md").is_file()
 
 
+def test_escape_tmdl_name_quotes_non_identifiers() -> None:
+    from cognos2powerbi.core.generators.pbip_generator import _escape_tmdl_name
+
+    # Bare ASCII identifiers stay unquoted.
+    assert _escape_tmdl_name("Sales") == "Sales"
+    assert _escape_tmdl_name("Order_Year") == "Order_Year"
+    # Spaces, leading digits, accented letters, and embedded quotes must be quoted.
+    assert _escape_tmdl_name("Contract List") == "'Contract List'"
+    assert _escape_tmdl_name("1") == "'1'"
+    assert _escape_tmdl_name("Región") == "'Región'"
+    assert _escape_tmdl_name("O'Brien") == "'O''Brien'"
+
+
+def test_partition_name_is_quoted_for_table_with_space(tmp_path: Path) -> None:
+    from cognos2powerbi.core.generators.pbip_generator import PbipGenerator
+    from cognos2powerbi.core.ir.models import Column, DataType, MigrationProject, Table
+
+    project = MigrationProject(name="SpacedTables")
+    table = Table(name="Contract List", source_query="Contract List")
+    table.columns.append(Column(name="1", data_type=DataType.STRING, source_column="1"))
+    project.tables.append(table)
+
+    out = tmp_path / "out"
+    PbipGenerator().generate(project, out)
+    tmdl = (
+        out / "SpacedTables.SemanticModel" / "definition" / "tables" / "Contract List.tmdl"
+    ).read_text(encoding="utf-8")
+    assert "partition 'Contract List' = m" in tmdl
+    assert "column '1'" in tmdl
+    # The unquoted forms that break the TMDL parser must not appear.
+    assert "partition Contract List = m" not in tmdl
+    assert "\tcolumn 1\n" not in tmdl
+
+
 def test_sql_server_partition_and_parameters(tmp_path: Path) -> None:
     result = run_migration(EXAMPLE, tmp_path, ai="none")
     definition = tmp_path / f"{result.project_name}.SemanticModel" / "definition"

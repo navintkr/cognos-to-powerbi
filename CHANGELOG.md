@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-16
+
+### Fixed
+
+- Quoted the TMDL partition name so tables whose names contain spaces (for example
+  `Contract List`) no longer fail to open with a TMDL indentation error. The partition declaration
+  now reads `partition 'Contract List' = m`.
+- Hardened TMDL identifier escaping so names that start with a digit (for example a column named
+  `1`), contain accented or non-ASCII letters, or contain a single quote are correctly quoted and
+  escaped. Previously these produced invalid TMDL that Power BI rejected on open.
+
 ## [0.3.1] - 2026-07-16
 
 ### Fixed

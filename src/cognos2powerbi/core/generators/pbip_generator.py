@@ -24,6 +24,7 @@ review_flags and surfaced to the user.
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from pathlib import Path
 
@@ -39,6 +40,9 @@ from cognos2powerbi.core.ir.models import (
 )
 
 _COMPATIBILITY_LEVEL = 1567
+
+# An unquoted TMDL identifier: ASCII letter or underscore, then ASCII letters, digits, underscores.
+_TMDL_BARE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 class PbipGenerator:
@@ -167,7 +171,7 @@ class PbipGenerator:
             if measure.format_string:
                 lines.append(f"\t\tformatString: {measure.format_string}")
             lines.append("")
-        lines.append(f"\tpartition {table.name} = m")
+        lines.append(f"\tpartition {_escape_tmdl_name(table.name)} = m")
         lines.append("\t\tmode: import")
         lines.append("\t\tsource =")
         lines.extend(self._render_partition_source(table, data_source))
@@ -283,10 +287,16 @@ def _platform(item_type: str, display_name: str) -> dict:
 
 
 def _escape_tmdl_name(name: str) -> str:
-    """Quote a TMDL object name when it contains spaces or special characters."""
-    if name and all(ch.isalnum() or ch == "_" for ch in name):
+    """Quote a TMDL object name unless it is a bare identifier.
+
+    An unquoted TMDL identifier must start with an ASCII letter or underscore and contain only
+    ASCII letters, digits, and underscores. Anything else (spaces, punctuation, accented letters,
+    or a leading digit such as a column literally named "1") must be single-quoted, and any single
+    quote inside the name is doubled.
+    """
+    if name and _TMDL_BARE_IDENTIFIER.match(name):
         return name
-    return f"'{name}'"
+    return "'" + name.replace("'", "''") + "'"
 
 
 def _write_json(path: Path, data: dict) -> None:
