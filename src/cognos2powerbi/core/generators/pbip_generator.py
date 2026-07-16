@@ -59,31 +59,46 @@ _PBIR_VERSION_SCHEMA = (
 )
 _PBIR_REPORT_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/"
-    "definition/report/3.1.0/schema.json"
+    "definition/report/3.3.0/schema.json"
 )
 _PBIR_PAGES_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/"
-    "definition/pagesMetadata/1.0.0/schema.json"
+    "definition/pagesMetadata/1.1.0/schema.json"
 )
 _PBIR_PAGE_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/"
-    "definition/page/2.0.0/schema.json"
+    "definition/page/2.1.0/schema.json"
 )
 _PBIR_VISUAL_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/"
-    "definition/visualContainer/2.0.0/schema.json"
+    "definition/visualContainer/2.9.0/schema.json"
 )
 # A built-in (SharedResources) base theme shipped with Power BI, and the report-format versions
 # recorded at import time. These mirror what current Power BI Desktop writes.
-_BASE_THEME_NAME = "CY25SU12"
-_BASE_THEME_VERSION_AT_IMPORT = {"visual": "2.5.0", "report": "3.1.0", "page": "2.3.0"}
+_BASE_THEME_NAME = "CY26SU05"
+_BASE_THEME_VERSION_AT_IMPORT = {"visual": "2.9.0", "report": "3.3.0", "page": "2.3.1"}
+# The base theme must be registered as a resource package or Power BI cannot resolve it, which
+# fails the whole report exploration (a "visualContainers undefined" render error).
+_REPORT_RESOURCE_PACKAGES = [
+    {
+        "name": "SharedResources",
+        "type": "SharedResources",
+        "items": [
+            {
+                "name": _BASE_THEME_NAME,
+                "path": f"BaseThemes/{_BASE_THEME_NAME}.json",
+                "type": "BaseTheme",
+            }
+        ],
+    }
+]
 _REPORT_SETTINGS = {
     "useStylableVisualContainerHeader": True,
-    "defaultFilterActionIsDataFilter": True,
+    "exportDataMode": "AllowSummarized",
     "defaultDrillFilterOtherVisuals": True,
     "allowChangeFilterTypes": True,
-    "allowInlineExploration": True,
     "useEnhancedTooltips": True,
+    "useDefaultAggregateDisplayName": True,
 }
 
 _CHART_VISUAL_TYPES = {
@@ -285,7 +300,7 @@ class PbipGenerator:
         definition = report_dir / "definition"
         _write_json(
             definition / "version.json",
-            {"$schema": _PBIR_VERSION_SCHEMA, "version": "4.0.0"},
+            {"$schema": _PBIR_VERSION_SCHEMA, "version": "2.0.0"},
         )
         _write_json(
             definition / "report.json",
@@ -298,6 +313,7 @@ class PbipGenerator:
                         "type": "SharedResources",
                     }
                 },
+                "resourcePackages": _REPORT_RESOURCE_PACKAGES,
                 "settings": _REPORT_SETTINGS,
             },
         )
@@ -372,22 +388,26 @@ class PbipGenerator:
         role_projections: dict[str, list[dict]] = {}
         for field in visual.fields:
             role = _pbir_role(visual.visual_type, field.role)
-            role_projections.setdefault(role, []).append(
-                {
-                    "field": self._field_expression(field, project),
-                    "queryRef": f"{field.table}.{field.name}",
-                    "active": True,
-                }
-            )
+            expression, is_measure = self._field_expression(field, project)
+            projection: dict[str, object] = {
+                "field": expression,
+                "queryRef": f"{field.table}.{field.name}",
+            }
+            # Power BI records nativeQueryRef for column projections (not measures).
+            if not is_measure:
+                projection["nativeQueryRef"] = field.name
+            projection["active"] = True
+            role_projections.setdefault(role, []).append(projection)
         return {
             role: {"projections": projections} for role, projections in role_projections.items()
         }
 
-    def _field_expression(self, field: VisualField, project: MigrationProject) -> dict:
+    def _field_expression(self, field: VisualField, project: MigrationProject) -> tuple[dict, bool]:
         table = next((t for t in project.tables if t.name == field.table), None)
         is_measure = bool(table and any(m.name == field.name for m in table.measures))
         inner = {"Expression": {"SourceRef": {"Entity": field.table}}, "Property": field.name}
-        return {"Measure": inner} if is_measure else {"Column": inner}
+        expression = {"Measure": inner} if is_measure else {"Column": inner}
+        return expression, is_measure
 
     # -------------------------------------------------------------- Review report
 

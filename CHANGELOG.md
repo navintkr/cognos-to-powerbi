@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-07-16
+
+### Fixed
+
+- The generated report now registers its base theme in a `resourcePackages` block and uses the
+  current theme and file schema versions, matching a real Power BI Desktop PBIP byte for byte
+  (report.json 3.3.0, page 2.1.0, visualContainer 2.9.0, version.json 2.0.0, theme `CY26SU05`).
+  Without the theme resource package, Power BI could not resolve the theme and failed to build the
+  report exploration, which surfaced as a `visualContainers` render error even for an empty page.
+
 ## [0.4.4] - 2026-07-16
 
 ### Fixed
