@@ -35,14 +35,54 @@ from cognos2powerbi.core.ir.models import (
     DataSourceKind,
     MigrationProject,
     Relationship,
+    ReportPage,
     Table,
     Visual,
+    VisualField,
+    VisualType,
 )
 
 _COMPATIBILITY_LEVEL = 1567
 
 # An unquoted TMDL identifier: ASCII letter or underscore, then ASCII letters, digits, underscores.
 _TMDL_BARE_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+# PBIR (enhanced report format) JSON schema URLs. Current Power BI Desktop renders PBIR; the legacy
+# single-file report.json is retired and fails to render in recent builds.
+_PBIR_DEFINITION_PROPERTIES_SCHEMA = (
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/"
+    "definitionProperties/2.0.0/schema.json"
+)
+_PBIR_VERSION_SCHEMA = (
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/"
+    "definition/versionMetadata/1.0.0/schema.json"
+)
+_PBIR_REPORT_SCHEMA = (
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/"
+    "definition/report/1.0.0/schema.json"
+)
+_PBIR_PAGES_SCHEMA = (
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/"
+    "definition/pagesMetadata/1.0.0/schema.json"
+)
+_PBIR_PAGE_SCHEMA = (
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/"
+    "definition/page/1.0.0/schema.json"
+)
+_PBIR_VISUAL_SCHEMA = (
+    "https://developer.microsoft.com/json-schemas/fabric/item/report/"
+    "definition/visualContainer/1.0.0/schema.json"
+)
+# A built-in (SharedResources) base theme shipped with Power BI.
+_BASE_THEME_NAME = "CY24SU10"
+_BASE_THEME_VERSION = "5.55"
+
+_CHART_VISUAL_TYPES = {
+    VisualType.COLUMN_CHART,
+    VisualType.BAR_CHART,
+    VisualType.LINE_CHART,
+    VisualType.PIE_CHART,
+}
 
 
 class PbipGenerator:
@@ -216,58 +256,123 @@ class PbipGenerator:
     # -------------------------------------------------------------------- Report
 
     def _write_report(self, report_dir: Path, model_dir: Path, project: MigrationProject) -> None:
+        """Write the report as PBIR (the modern ``definition/`` folder), not legacy report.json.
+
+        Power BI Desktop (2026) renders the PBIR format; the legacy single-file report.json is
+        being retired and fails to render in current builds.
+        """
         _write_json(report_dir / ".platform", _platform("Report", project.name))
         _write_json(
             report_dir / "definition.pbir",
             {
-                "version": "1.0",
+                "$schema": _PBIR_DEFINITION_PROPERTIES_SCHEMA,
+                "version": "4.0",
                 "datasetReference": {"byPath": {"path": f"../{model_dir.name}"}},
             },
         )
-        _write_json(report_dir / "report.json", self._render_report_json(project))
+        definition = report_dir / "definition"
+        _write_json(
+            definition / "version.json",
+            {"$schema": _PBIR_VERSION_SCHEMA, "version": "4.0.0"},
+        )
+        _write_json(
+            definition / "report.json",
+            {
+                "$schema": _PBIR_REPORT_SCHEMA,
+                "themeCollection": {
+                    "baseTheme": {
+                        "name": _BASE_THEME_NAME,
+                        "reportVersionAtImport": _BASE_THEME_VERSION,
+                        "type": "SharedResources",
+                    }
+                },
+                "layoutOptimization": "None",
+            },
+        )
+        self._write_pages(definition / "pages", project)
 
-    def _render_report_json(self, project: MigrationProject) -> dict:
-        sections = []
-        for index, page in enumerate(project.pages):
-            visual_containers = [
-                self._render_visual_container(visual, position)
-                for position, visual in enumerate(page.visuals)
-            ]
-            sections.append(
+    def _write_pages(self, pages_dir: Path, project: MigrationProject) -> None:
+        used: set[str] = set()
+        page_names: list[str] = []
+        for index, page in enumerate(project.pages, start=1):
+            base = page.name or page.display_name or f"Page{index}"
+            page_name = _safe_report_name(base, used, f"Page{index}")
+            page_names.append(page_name)
+            self._write_page(pages_dir / page_name, page_name, page, project)
+        _write_json(
+            pages_dir / "pages.json",
+            {
+                "$schema": _PBIR_PAGES_SCHEMA,
+                "pageOrder": page_names,
+                "activePageName": page_names[0] if page_names else "",
+            },
+        )
+
+    def _write_page(
+        self, page_dir: Path, page_name: str, page: ReportPage, project: MigrationProject
+    ) -> None:
+        _write_json(
+            page_dir / "page.json",
+            {
+                "$schema": _PBIR_PAGE_SCHEMA,
+                "name": page_name,
+                "displayName": page.display_name or page_name,
+                "displayOption": "FitToPage",
+                "height": 720,
+                "width": 1280,
+            },
+        )
+        used: set[str] = set()
+        for index, visual in enumerate(page.visuals, start=1):
+            visual_name = _safe_report_name(
+                f"{visual.visual_type.value}{index}", used, f"visual{index}"
+            )
+            self._write_visual(page_dir / "visuals" / visual_name, visual_name, visual, project)
+
+    def _write_visual(
+        self, visual_dir: Path, visual_name: str, visual: Visual, project: MigrationProject
+    ) -> None:
+        visual_config: dict[str, object] = {"visualType": visual.visual_type.value}
+        query_state = self._build_query_state(visual, project)
+        if query_state:
+            visual_config["query"] = {"queryState": query_state}
+        _write_json(
+            visual_dir / "visual.json",
+            {
+                "$schema": _PBIR_VISUAL_SCHEMA,
+                "name": visual_name,
+                "position": {
+                    "x": visual.x,
+                    "y": visual.y,
+                    "z": 0,
+                    "width": visual.width,
+                    "height": visual.height,
+                    "tabOrder": 0,
+                },
+                "visual": visual_config,
+            },
+        )
+
+    def _build_query_state(self, visual: Visual, project: MigrationProject) -> dict:
+        role_projections: dict[str, list[dict]] = {}
+        for field in visual.fields:
+            role = _pbir_role(visual.visual_type, field.role)
+            role_projections.setdefault(role, []).append(
                 {
-                    "name": page.name,
-                    "displayName": page.display_name,
-                    "ordinal": index,
-                    "width": 1280,
-                    "height": 720,
-                    "visualContainers": visual_containers,
+                    "field": self._field_expression(field, project),
+                    "queryRef": f"{field.table}.{field.name}",
+                    "nativeQueryRef": field.name,
                 }
             )
         return {
-            "version": "1.0",
-            "themeCollection": {"baseTheme": {"name": "CY24SU10"}},
-            "sections": sections,
-            "config": json.dumps({"version": "5.43"}),
+            role: {"projections": projections} for role, projections in role_projections.items()
         }
 
-    def _render_visual_container(self, visual: Visual, position: int) -> dict:
-        projections: dict[str, list[dict]] = {}
-        for field in visual.fields:
-            projections.setdefault(field.role, []).append(
-                {"queryRef": f"{field.table}.{field.name}"}
-            )
-        single_visual = {
-            "visualType": visual.visual_type.value,
-            "projections": projections,
-            "drillFilterOtherVisuals": True,
-        }
-        return {
-            "x": 16 + (position % 2) * 632,
-            "y": 16 + (position // 2) * 360,
-            "width": visual.width,
-            "height": visual.height,
-            "config": json.dumps({"singleVisual": single_visual}),
-        }
+    def _field_expression(self, field: VisualField, project: MigrationProject) -> dict:
+        table = next((t for t in project.tables if t.name == field.table), None)
+        is_measure = bool(table and any(m.name == field.name for m in table.measures))
+        inner = {"Expression": {"SourceRef": {"Entity": field.table}}, "Property": field.name}
+        return {"Measure": inner} if is_measure else {"Column": inner}
 
     # -------------------------------------------------------------- Review report
 
@@ -327,6 +432,33 @@ def _dax_single_line(expression: str) -> str:
     without_line_comments = re.sub(r"//[^\n]*", " ", expression)
     without_block_comments = re.sub(r"/\*.*?\*/", " ", without_line_comments, flags=re.DOTALL)
     return re.sub(r"\s+", " ", without_block_comments).strip()
+
+
+def _safe_report_name(base: str, used: set[str], fallback: str) -> str:
+    """Return a unique PBIR object name (word characters or hyphens, max 50 chars)."""
+    cleaned = re.sub(r"[^0-9A-Za-z_-]+", "", base)[:50] or fallback
+    candidate = cleaned
+    suffix = 2
+    while candidate in used:
+        candidate = f"{cleaned}{suffix}"[:50]
+        suffix += 1
+    used.add(candidate)
+    return candidate
+
+
+def _pbir_role(visual_type: VisualType, role: str) -> str:
+    """Map a generic field role onto the PBIR data role for the given visual type."""
+    key = (role or "").strip().lower()
+    if visual_type == VisualType.MATRIX:
+        return {
+            "category": "Rows",
+            "rows": "Rows",
+            "series": "Columns",
+            "columns": "Columns",
+        }.get(key, "Values")
+    if visual_type in _CHART_VISUAL_TYPES:
+        return {"category": "Category", "series": "Series", "values": "Y", "y": "Y"}.get(key, "Y")
+    return "Values"
 
 
 def _write_json(path: Path, data: dict) -> None:

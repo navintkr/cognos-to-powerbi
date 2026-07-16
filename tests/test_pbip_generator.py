@@ -18,7 +18,11 @@ def test_generates_pbip_structure(tmp_path: Path) -> None:
     assert (tmp_path / f"{name}.pbip").is_file()
     assert (tmp_path / f"{name}.SemanticModel" / "definition" / "model.tmdl").is_file()
     assert (tmp_path / f"{name}.SemanticModel" / "definition" / "tables" / "Sales.tmdl").is_file()
-    assert (tmp_path / f"{name}.Report" / "report.json").is_file()
+    # PBIR report format: a definition/ folder replaces the legacy single report.json.
+    report_def = tmp_path / f"{name}.Report" / "definition"
+    assert (report_def / "report.json").is_file()
+    assert (report_def / "version.json").is_file()
+    assert (report_def / "pages" / "pages.json").is_file()
     assert (tmp_path / f"{name}.Report" / "definition.pbir").is_file()
 
 
@@ -27,6 +31,23 @@ def test_pbip_root_is_valid_json(tmp_path: Path) -> None:
     pbip = json.loads((tmp_path / f"{result.project_name}.pbip").read_text(encoding="utf-8"))
     assert pbip["version"] == "1.0"
     assert pbip["artifacts"][0]["report"]["path"].endswith(".Report")
+
+
+def test_pbir_visual_has_query_projections(tmp_path: Path) -> None:
+    result = run_migration(EXAMPLE, tmp_path, ai="none")
+    pages = tmp_path / f"{result.project_name}.Report" / "definition" / "pages"
+    visual_files = list(pages.glob("*/visuals/*/visual.json"))
+    assert visual_files, "expected at least one PBIR visual.json"
+    visual = json.loads(visual_files[0].read_text(encoding="utf-8"))
+    assert visual["visual"]["visualType"]
+    query_state = visual["visual"]["query"]["queryState"]
+    role = next(iter(query_state.values()))
+    projection = role["projections"][0]
+    assert "queryRef" in projection
+    container = projection["field"].get("Column") or projection["field"].get("Measure")
+    assert container is not None
+    assert container["Expression"]["SourceRef"]["Entity"]
+    assert container["Property"]
 
 
 def test_pbip_schema_matches_power_bi_pattern(tmp_path: Path) -> None:

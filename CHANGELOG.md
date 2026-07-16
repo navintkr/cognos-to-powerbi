@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-16
+
+### Fixed
+
+- Report generation now emits the modern Power BI enhanced report format (PBIR): a `definition/`
+  folder with `version.json`, `report.json`, and per-page/per-visual files, plus a proper base
+  theme. The previous legacy single-file `report.json` failed to render in Power BI Desktop (July
+  2026) with `Cannot read properties of undefined (reading 'customTheme')`. The semantic model was
+  unaffected; only the report layer changed. `definition.pbir` now declares version 4.0 with its
+  schema, and visuals carry a proper field query (`Column`/`Measure` with `SourceRef`).
+
 ## [0.4.1] - 2026-07-16
 
 ### Added
