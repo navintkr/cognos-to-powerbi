@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-16
+
+### Added
+
+- The `migrate` commands now print a grouped review breakdown in the terminal (by severity and
+  category, with counts), so the conversion gaps are visible at a glance without opening
+  `MIGRATION_REVIEW.md`. The full itemized list still goes to that file.
+
 ## [0.4.0] - 2026-07-16
 
 ### Added

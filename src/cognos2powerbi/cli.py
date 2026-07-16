@@ -102,11 +102,41 @@ def _print_summary(result: MigrationResult, out_dir: Path) -> None:
     console.print(summary)
 
     if result.review_flag_count:
+        _print_review_breakdown(result)
         review_path = Path(out_dir) / "MIGRATION_REVIEW.md"
         console.print(
             f"[yellow]{result.review_flag_count} item(s) need review. See {review_path}.[/yellow]"
         )
     console.print("[green]Done.[/green]")
+
+
+_SEVERITY_STYLE = {"error": "red", "warning": "yellow", "info": "cyan"}
+
+
+def _print_review_breakdown(result: MigrationResult, limit: int = 8) -> None:
+    """Print a concise, grouped summary of review items so the gaps are visible in the terminal."""
+    groups: dict[tuple[str, str], int] = {}
+    for flag in result.review_flags:
+        key = (flag.severity.value, flag.code)
+        groups[key] = groups.get(key, 0) + 1
+    if not groups:
+        return
+    # Sort by severity (error, warning, info) then by descending count.
+    order = {"error": 0, "warning": 1, "info": 2}
+    rows = sorted(groups.items(), key=lambda kv: (order.get(kv[0][0], 3), -kv[1]))
+
+    table = RichTable(title="Items to review", title_justify="left")
+    table.add_column("Severity")
+    table.add_column("Category")
+    table.add_column("Count", justify="right")
+    for (severity, code), count in rows[:limit]:
+        style = _SEVERITY_STYLE.get(severity, "white")
+        table.add_row(f"[{style}]{severity}[/{style}]", code, str(count))
+    console.print(table)
+    if len(rows) > limit:
+        console.print(
+            f"[dim]... and {len(rows) - limit} more categor(y/ies) in the review file.[/dim]"
+        )
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
