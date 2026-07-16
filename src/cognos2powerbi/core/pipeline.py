@@ -14,6 +14,7 @@ from cognos2powerbi.core.ir.models import (
     MigrationProject,
     ReviewFlag,
     Severity,
+    Table,
 )
 from cognos2powerbi.core.modeling import ModelingSummary, analyze_model
 from cognos2powerbi.core.parsers import (
@@ -45,10 +46,11 @@ class MigrationResult(BaseModel):
 
 
 def _refine_with_ai(project: MigrationProject, provider: AiProvider) -> int:
-    """Translate Cognos measure expressions to DAX using the AI provider.
+    """Translate Cognos expressions to DAX using the AI provider.
 
-    Returns the number of measures successfully refined. Failures leave the deterministic
-    output untouched and keep the existing review flags.
+    Refines both measures and calculated-column candidates. Returns the number of items
+    successfully refined. Failures leave the deterministic output untouched and keep review flags,
+    so the model always stays loadable.
     """
     if not provider.is_available():
         project.add_flag(
@@ -92,6 +94,38 @@ def _refine_with_ai(project: MigrationProject, provider: AiProvider) -> int:
                     Severity.WARNING,
                     source_ref=measure.cognos_expression,
                 )
+        refined += _refine_calculated_columns(table, provider)
+    return refined
+
+
+def _refine_calculated_columns(table: Table, provider: AiProvider) -> int:
+    """Ask the AI provider to convert flagged calculation columns into DAX calculated columns."""
+    refined = 0
+    for column in table.columns:
+        if not column.needs_calculation or column.is_calculated:
+            continue
+        if not column.cognos_expression:
+            continue
+        request = AiRequest(
+            instruction=(
+                "Translate the following IBM Cognos report data-item expression into a single "
+                "Microsoft Power BI DAX calculated column expression. Reference columns as "
+                "'Table'[Column]. Return only the DAX expression, with no explanation, code "
+                "fences, or column name."
+            ),
+            context=(
+                f"Table: {table.name}\n"
+                f"Column: {column.name}\n"
+                f"Cognos expression: {column.cognos_expression}"
+            ),
+        )
+        result = provider.complete(request)
+        if result.ok and result.text:
+            column.dax_expression = result.text.strip()
+            column.is_calculated = True
+            column.source_column = None
+            column.needs_calculation = False
+            refined += 1
     return refined
 
 

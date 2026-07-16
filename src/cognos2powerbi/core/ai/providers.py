@@ -1,8 +1,13 @@
-"""Concrete AI providers that shell out to vendor CLIs.
+"""Concrete AI providers.
 
-Each provider invokes its CLI in non-interactive mode and returns the model output as text.
-The providers are deliberately minimal: they take a single prompt and return a single response.
-Prompt construction and response parsing live in the refinement stage, not here.
+Two families are supported:
+
+- CLI providers (Claude, Copilot, Codex) that shell out to a vendor command-line executable.
+- The Azure OpenAI provider that calls an Azure OpenAI deployment over HTTPS using the ``openai``
+  SDK, authenticating with an API key or, by default, Microsoft Entra ID (Azure CLI credentials).
+
+Each provider takes a single prompt and returns a single response. Prompt construction and response
+parsing live in the refinement stage, not here.
 """
 
 from __future__ import annotations
@@ -10,10 +15,17 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
 
 from cognos2powerbi.core.ai.base import AiProvider, AiRequest, AiResult, NullProvider
 
 _DEFAULT_TIMEOUT = int(os.environ.get("COGNOS2PBI_AI_TIMEOUT", "120"))
+
+# Default Azure OpenAI target. Override any of these with the matching environment variable.
+_DEFAULT_AOAI_ENDPOINT = "https://gmadbheal-aoai-nuez2i.openai.azure.com/"
+_DEFAULT_AOAI_DEPLOYMENT = "gpt-5.4"
+_DEFAULT_AOAI_API_VERSION = "2024-10-21"
+_AOAI_SCOPE = "https://cognitiveservices.azure.com/.default"
 
 
 class _CliProvider(AiProvider):
@@ -96,10 +108,120 @@ class CodexProvider(_CliProvider):
         super().__init__(executable, ["exec"])
 
 
-_PROVIDERS = {
+class AzureOpenAiProvider(AiProvider):
+    """Azure OpenAI via the ``openai`` SDK.
+
+    Authentication order: an explicit API key (``COGNOS2PBI_AOAI_API_KEY`` or
+    ``AZURE_OPENAI_API_KEY``) if set, otherwise Microsoft Entra ID via
+    :class:`azure.identity.DefaultAzureCredential` (Azure CLI credentials on a developer machine).
+    The endpoint, deployment, and API version are configurable through environment variables and
+    default to the project's Azure OpenAI resource.
+    """
+
+    name = "azure"
+
+    def __init__(self) -> None:
+        self._endpoint = os.environ.get("COGNOS2PBI_AOAI_ENDPOINT", _DEFAULT_AOAI_ENDPOINT)
+        self._deployment = os.environ.get("COGNOS2PBI_AOAI_DEPLOYMENT", _DEFAULT_AOAI_DEPLOYMENT)
+        self._api_version = os.environ.get("COGNOS2PBI_AOAI_API_VERSION", _DEFAULT_AOAI_API_VERSION)
+        self._api_key = os.environ.get("COGNOS2PBI_AOAI_API_KEY") or os.environ.get(
+            "AZURE_OPENAI_API_KEY"
+        )
+        self._client: object | None = None
+
+    @staticmethod
+    def _sdk_present() -> bool:
+        import importlib.util
+
+        return importlib.util.find_spec("openai") is not None
+
+    def is_available(self) -> bool:
+        if not self._sdk_present():
+            return False
+        if self._api_key:
+            return True
+        # Entra ID path: confirm we can actually obtain a token so failures are reported once.
+        try:
+            from azure.identity import DefaultAzureCredential
+
+            DefaultAzureCredential().get_token(_AOAI_SCOPE)
+            return True
+        except Exception:
+            return False
+
+    def _get_client(self) -> object:
+        if self._client is not None:
+            return self._client
+        from openai import AzureOpenAI
+
+        if self._api_key:
+            self._client = AzureOpenAI(
+                azure_endpoint=self._endpoint,
+                api_key=self._api_key,
+                api_version=self._api_version,
+            )
+        else:
+            from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+
+            token_provider = get_bearer_token_provider(DefaultAzureCredential(), _AOAI_SCOPE)
+            self._client = AzureOpenAI(
+                azure_endpoint=self._endpoint,
+                azure_ad_token_provider=token_provider,
+                api_version=self._api_version,
+            )
+        return self._client
+
+    def complete(self, request: AiRequest) -> AiResult:
+        prompt = request.instruction
+        if request.context:
+            prompt = f"{request.instruction}\n\n{request.context}"
+        try:
+            client = self._get_client()
+            response = client.chat.completions.create(  # type: ignore[attr-defined]
+                model=self._deployment,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are an expert that converts IBM Cognos report expressions into "
+                            "Microsoft Power BI DAX. Return only the DAX expression: no prose, no "
+                            "code fences, and no measure or column name."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                max_completion_tokens=request.max_output_tokens,
+            )
+            text = (response.choices[0].message.content or "").strip()
+        except Exception as exc:  # noqa: BLE001 - never raise; report as a failed result
+            return AiResult(ok=False, error=str(exc), provider=self.name)
+        if not text:
+            return AiResult(
+                ok=False, error="Azure OpenAI returned an empty response.", provider=self.name
+            )
+        return AiResult(ok=True, text=_strip_code_fence(text), provider=self.name)
+
+
+def _strip_code_fence(text: str) -> str:
+    """Remove a surrounding Markdown code fence if the model added one."""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+    return stripped
+
+
+_PROVIDERS: dict[str, Callable[[], AiProvider]] = {
     "claude": ClaudeProvider,
     "copilot": CopilotProvider,
     "codex": CodexProvider,
+    "azure": AzureOpenAiProvider,
+    "aoai": AzureOpenAiProvider,
+    "azureopenai": AzureOpenAiProvider,
     "none": NullProvider,
 }
 

@@ -6,12 +6,18 @@ contributions and adoption.
 ## Shipped
 
 - Namespace-agnostic Cognos report parser.
+- Report data-type inference (RS_dataType, casts, numeric functions).
+- Calculated data items to DAX calculated columns, with unmapped items kept as loadable physical
+  columns and flagged.
+- Query joins to Power BI relationships; honest flags for derived queries, detail filters, and
+  package sources.
 - Framework Manager model parser to TMDL with relationship detection.
 - Data module parser to TMDL (query subjects, facts, identifiers, relationships).
 - Dashboard and exploration parser to PBIR report pages.
 - Star-schema modeling (fact and dimension roles, date tables, summarize-by).
 - Deterministic PBIP generation (TMDL + PBIR).
-- Provider-agnostic AI refinement for measures.
+- Provider-agnostic AI refinement for measures and calculated columns (Azure OpenAI, Claude,
+  GitHub Copilot, Codex).
 - Review report for unmapped items.
 - SaaS portal: upload, analyze, review flags, and download on the FastAPI backend.
 - Batch and folder migration with a consolidated coverage report (Markdown and JSON).

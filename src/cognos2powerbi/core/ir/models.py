@@ -112,6 +112,9 @@ class Column(BaseModel):
     data_type: DataType = DataType.STRING
     source_column: str | None = None
     cognos_expression: str | None = None
+    dax_expression: str | None = None
+    is_calculated: bool = False
+    needs_calculation: bool = False
     is_hidden: bool = False
     is_key: bool = False
     is_foreign_key: bool = False

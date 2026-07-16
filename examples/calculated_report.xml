@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<report xmlns="http://developer.cognos.com/schemas/report/16.2/" expressionLocale="en">
+  <queries>
+    <query name="Orders">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="Order ID" aggregate="none">
+          <expression>[DB].[Orders].[Order ID]</expression>
+          <XMLAttributes>
+            <XMLAttribute output="no" name="RS_dataType" value="3"/>
+          </XMLAttributes>
+        </dataItem>
+        <dataItem name="Order Date" aggregate="none">
+          <expression>cast([DB].[Orders].[Order Date];date)</expression>
+          <XMLAttributes>
+            <XMLAttribute output="no" name="RS_dataType" value="4"/>
+          </XMLAttributes>
+        </dataItem>
+        <dataItem name="Customer Code" aggregate="none">
+          <expression>upper([DB].[Orders].[Customer Code])</expression>
+        </dataItem>
+        <dataItem name="Row Number" aggregate="none">
+          <expression>running-count([DB].[Orders].[Order ID])</expression>
+        </dataItem>
+        <dataItem name="Revenue" aggregate="total">
+          <expression>[DB].[Orders].[Revenue]</expression>
+        </dataItem>
+      </selection>
+      <detailFilters>
+        <detailFilter>
+          <filterExpression>[DB].[Orders].[Country]='US'</filterExpression>
+        </detailFilter>
+      </detailFilters>
+    </query>
+    <query name="Customers">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="Customer Code" aggregate="none">
+          <expression>[DB].[Customers].[Customer Code]</expression>
+        </dataItem>
+        <dataItem name="Customer Name" aggregate="none">
+          <expression>[DB].[Customers].[Customer Name]</expression>
+        </dataItem>
+      </selection>
+    </query>
+    <query name="OrdersEnriched">
+      <source>
+        <joinOperation>
+          <joinOperands>
+            <joinOperand cardinality="1:n">
+              <queryRef refQuery="Orders"/>
+            </joinOperand>
+            <joinOperand cardinality="1:1">
+              <queryRef refQuery="Customers"/>
+            </joinOperand>
+          </joinOperands>
+          <joinFilter>
+            <filterExpression>[Orders].[Customer Code] = [Customers].[Customer Code]</filterExpression>
+          </joinFilter>
+        </joinOperation>
+      </source>
+      <selection>
+        <dataItem name="Order ID" aggregate="none">
+          <expression>[Orders].[Order ID]</expression>
+        </dataItem>
+      </selection>
+    </query>
+  </queries>
+  <layouts>
+    <layout>
+      <reportPages>
+        <page name="Page1">
+          <pageBody>
+            <contents>
+              <list refQuery="Orders"/>
+            </contents>
+          </pageBody>
+        </page>
+      </reportPages>
+    </layout>
+  </layouts>
+  <reportName>Calculated Report Sample</reportName>
+</report>

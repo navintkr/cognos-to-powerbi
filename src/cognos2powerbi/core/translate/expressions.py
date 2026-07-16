@@ -66,7 +66,10 @@ _KNOWN_DAX_FUNCTIONS = (
 
 _REFERENCE = re.compile(r"\[[^\[\]]+\](?:\.\[[^\[\]]+\])*")
 _SIMPLE_REFERENCE = re.compile(r"^\[[^\[\]]+\](?:\.\[[^\[\]]+\])*$")
-_FUNCTION_CALL = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+# Cognos function names may contain hyphens or leading underscores (running-count, _round,
+# _add_years). Capture the whole token so unknown Cognos functions are detected, not just the DAX
+# fragment after a hyphen.
+_FUNCTION_CALL = re.compile(r"([A-Za-z_][A-Za-z0-9_\-]*)\s*\(")
 
 
 @dataclass

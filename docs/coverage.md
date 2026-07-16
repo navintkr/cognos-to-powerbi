@@ -10,14 +10,20 @@ welcome.
 | --- | --- | --- |
 | Query | Semantic-model table | Available |
 | Data item (no aggregate) | Column | Available |
+| Data item data type | TMDL type from RS_dataType, `cast(...)`, and numeric functions | Available |
 | Data item (sum/avg/min/max/count) on a simple reference | DAX measure | Available |
-| Data item with a complex expression | DAX measure (deterministic, AI fallback) | Partial |
+| Calculated data item (deterministic) | DAX calculated column | Available |
+| Calculated data item (AI-assisted) | DAX calculated column (verify) | AI-assisted |
+| Calculated data item (unmapped) | Physical column, flagged for review | Partial |
+| Query join (`joinOperation`) | Relationship (oriented from the many side) | Available |
+| Derived query (`queryRef`) | Table, flagged to relate or replace | Partial |
+| Detail filters | Flagged for review (manual Power Query / report filter) | Planned |
 | List | Table visual | Available |
 | Crosstab | Matrix visual | Partial |
 | Column / bar / line / pie chart | Corresponding Power BI visual | Partial |
 | Page | Report page | Available |
 | Data source partitions | Parameterized Power Query (SQL Server) | Available |
-| Filters / detail filters | Visual / page filters | Planned |
+| Package / model source | Flagged (partitions are placeholders to repoint) | Partial |
 | Conditional formatting | Conditional formatting | Planned |
 | Prompts and parameters | Slicers / parameters | Planned |
 

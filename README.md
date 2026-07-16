@@ -32,8 +32,9 @@ to the Power BI / Microsoft Fabric service.
 - **Faster migrations.** Convert hundreds of reports in a fraction of the manual time.
 - **Consistent output.** Deterministic, reviewable PBIP artifacts instead of hand-rebuilt reports.
 - **AI-assisted, not AI-dependent.** The mechanical conversion works without any AI key; AI only
-  refines what cannot be mapped deterministically.
-- **Provider-agnostic AI.** Use Claude Code CLI, GitHub Copilot CLI, or OpenAI Codex CLI.
+  refines what cannot be mapped deterministically, and never at the cost of a loadable model.
+- **Provider-agnostic AI.** Use Azure OpenAI (Entra ID), Claude Code CLI, GitHub Copilot CLI, or
+  OpenAI Codex CLI.
 - **Open and extensible.** MIT-licensed, plugin-friendly parsers and generators.
 
 ## Supported conversions
@@ -152,11 +153,16 @@ To point at a different server, change `--server` / `--database`, or edit the `S
 
 ## AI-assisted refinement (optional)
 
-Enable an AI provider to translate complex Cognos expressions and layouts into Power BI DAX and
-PBIR visuals. The provider is selected by configuration and shells out to the corresponding CLI.
+Enable an AI provider to translate complex Cognos expressions (calculated columns and measures)
+into Power BI DAX. Azure OpenAI runs over HTTPS with Microsoft Entra ID; the others shell out to
+their CLI.
 
 ```bash
-# Claude Code CLI (default)
+# Azure OpenAI (Entra ID via az login; install extras first)
+pip install "cognos2powerbi[azure]"
+cognos2pbi migrate ./report.xml --out ./out/Report --ai azure
+
+# Claude Code CLI
 cognos2pbi migrate ./report.xml --out ./out/Report --ai claude
 
 # GitHub Copilot CLI
@@ -167,7 +173,9 @@ cognos2pbi migrate ./report.xml --out ./out/Report --ai codex
 ```
 
 If no AI provider is configured, the tool completes a deterministic conversion and flags items that
-need manual review. See [docs/ai-providers.md](docs/ai-providers.md).
+need manual review. Either way the generated model stays loadable: an expression that cannot be
+translated remains a physical column and is listed in `MIGRATION_REVIEW.md` rather than emitted as
+invalid DAX. See [docs/ai-providers.md](docs/ai-providers.md).
 
 ## How it works
 

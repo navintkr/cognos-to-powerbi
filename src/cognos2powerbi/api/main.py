@@ -42,7 +42,7 @@ app = FastAPI(
 
 _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB per file
 _MAX_BATCH_FILES = 50
-_ALLOWED_PROVIDERS = {"claude", "copilot", "codex", "none"}
+_ALLOWED_PROVIDERS = {"claude", "copilot", "codex", "azure", "aoai", "azureopenai", "none"}
 _ALLOWED_KINDS = {"auto", "report", "model", "module", "dashboard"}
 _KIND_RUNNERS = {
     "report": run_migration,

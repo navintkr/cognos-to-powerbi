@@ -7,6 +7,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-16
+
+### Added
+
+- Azure OpenAI provider (`--ai azure`). Calls an Azure OpenAI deployment over HTTPS using the
+  `openai` SDK, authenticating with Microsoft Entra ID by default (Azure CLI credentials) or an API
+  key if set. Configurable endpoint, deployment, and API version. Install with the new `[azure]`
+  extra (`pip install "cognos2powerbi[azure]"`).
+- AI refinement now also converts calculated columns (not just measures) into DAX.
+- Report data-type inference: TMDL types are derived from the Cognos `RS_dataType` attribute,
+  `cast(...; type)` expressions, and numeric functions, so dates and numbers are no longer flattened
+  to text.
+- Calculated data items become DAX calculated columns when the translation is deterministic and
+  confident. Items that cannot be translated stay as loadable physical columns and are flagged, so
+  the model never contains invalid DAX.
+- Query joins (`joinOperation`) are captured as Power BI relationships, oriented from the many side.
+
+### Changed
+
+- Honest review reporting: derived queries (`queryRef`), unapplied detail filters, and package/model
+  sources are now flagged for review instead of being silently dropped. A report that previously
+  showed zero review items now surfaces every gap in `MIGRATION_REVIEW.md`.
+
+### Fixed
+
+- Hyphenated and underscore-prefixed Cognos functions (for example `running-count`, `_round`) are
+  no longer mistaken for known DAX functions, which previously let an untranslatable expression be
+  emitted as invalid DAX.
+- AI-generated (or multi-line) DAX is collapsed to a single line when rendered into TMDL, avoiding a
+  TMDL indentation error on open.
+
 ## [0.3.2] - 2026-07-16
 
 ### Fixed

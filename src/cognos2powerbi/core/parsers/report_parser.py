@@ -21,10 +21,12 @@ from pathlib import Path
 from lxml import etree
 
 from cognos2powerbi.core.ir.models import (
+    Cardinality,
     Column,
     DataType,
     Measure,
     MigrationProject,
+    Relationship,
     ReportPage,
     Severity,
     Table,
@@ -47,6 +49,39 @@ _LAYOUT_TO_VISUAL = {
     "pieChart": VisualType.PIE_CHART,
 }
 
+# Cognos Report Studio RS_dataType numeric codes -> TMDL data type. Codes seen in the field:
+# 3 = character/string, 4 = dateTime, 5 = time, 7 = date, 8 = interval/timestamp, others numeric.
+_RS_DATATYPE_TO_TMDL = {
+    "1": DataType.INT64,
+    "2": DataType.INT64,
+    "3": DataType.STRING,
+    "4": DataType.DATE_TIME,
+    "5": DataType.DATE_TIME,
+    "7": DataType.DATE_TIME,
+    "8": DataType.DATE_TIME,
+    "9": DataType.DECIMAL,
+    "10": DataType.DOUBLE,
+}
+
+# A plain qualified Cognos reference such as [Namespace].[Query Subject].[Item].
+_SIMPLE_REF_RE = re.compile(r"^\[[^\[\]]+\](?:\.\[[^\[\]]+\])*$")
+# cast([reference]; targetType) - a type coercion of a single reference.
+_CAST_FULL_RE = re.compile(
+    r"^cast\s*\(\s*(?P<inner>.+?)\s*;\s*(?P<type>[A-Za-z0-9_]+)\s*\)$",
+    re.IGNORECASE | re.DOTALL,
+)
+# Cognos functions that imply an integer or floating result when no type hint is present.
+_COUNT_FUNCS_RE = re.compile(
+    r"\b(running[-_]count|running[-_]total|count|_?rowcount)\s*\(", re.IGNORECASE
+)
+_FLOAT_FUNCS_RE = re.compile(
+    r"\b(average|avg|median|stddev|std[-_]?dev|variance|percentile|ratio)\s*\(", re.IGNORECASE
+)
+# A join filter of the form [A].[col] = [B].[col].
+_JOIN_EQUALITY_RE = re.compile(
+    r"^\s*(?P<left>\[[^\[\]]+\](?:\.\[[^\[\]]+\])*)\s*=\s*(?P<right>\[[^\[\]]+\](?:\.\[[^\[\]]+\])*)\s*$"
+)
+
 
 def _strip_namespaces(tree: etree._Element) -> etree._Element:
     """Remove XML namespaces in place so element lookups are version-agnostic."""
@@ -64,13 +99,63 @@ def _sanitize_identifier(raw: str) -> str:
     return name or "Unnamed"
 
 
-def _infer_data_type(data_item: etree._Element) -> DataType:
-    """Infer a TMDL data type from data-item attributes when present."""
+def _last_segment(reference: str) -> str:
+    """Return the final ``[segment]`` of a qualified Cognos reference, without brackets."""
+    parts = re.findall(r"\[([^\[\]]+)\]", reference)
+    return _sanitize_identifier(parts[-1]) if parts else reference.strip("[]")
+
+
+def _rs_data_type(data_item: etree._Element) -> DataType | None:
+    """Return the TMDL type implied by an ``RS_dataType`` XML attribute, if present."""
+    for attr in data_item.iter("XMLAttribute"):
+        if attr.get("name") == "RS_dataType":
+            code = (attr.get("value") or "").strip()
+            return _RS_DATATYPE_TO_TMDL.get(code)
+    return None
+
+
+def _infer_data_type(data_item: etree._Element, expression: str | None) -> DataType:
+    """Infer a TMDL data type from data-item attributes, RS_dataType, or the expression."""
     for attr in ("datatype", "dataType", "type"):
         value = data_item.get(attr)
         if value:
             return DataType.from_cognos(value)
+    rs_type = _rs_data_type(data_item)
+    if rs_type is not None:
+        return rs_type
+    if expression:
+        cast = _CAST_FULL_RE.match(expression.strip())
+        if cast:
+            return DataType.from_cognos(cast.group("type"))
+        if _COUNT_FUNCS_RE.search(expression):
+            return DataType.INT64
+        if _FLOAT_FUNCS_RE.search(expression):
+            return DataType.DOUBLE
     return DataType.STRING
+
+
+def _reference_source(expression: str | None, fallback: str) -> str:
+    """Return the physical source column for a reference or cast-of-reference expression."""
+    if not expression:
+        return fallback
+    expr = expression.strip()
+    if _SIMPLE_REF_RE.match(expr):
+        return _last_segment(expr)
+    cast = _CAST_FULL_RE.match(expr)
+    if cast and _SIMPLE_REF_RE.match(cast.group("inner").strip()):
+        return _last_segment(cast.group("inner").strip())
+    return fallback
+
+
+def _is_reference_like(expression: str | None) -> bool:
+    """Return True when the expression is a plain reference or a cast of a plain reference."""
+    if not expression or not expression.strip():
+        return True
+    expr = expression.strip()
+    if _SIMPLE_REF_RE.match(expr):
+        return True
+    cast = _CAST_FULL_RE.match(expr)
+    return bool(cast and _SIMPLE_REF_RE.match(cast.group("inner").strip()))
 
 
 class CognosReportParser:
@@ -112,6 +197,7 @@ class CognosReportParser:
         return project
 
     def _parse_queries(self, root: etree._Element, project: MigrationProject) -> None:
+        package_flagged = False
         for query in root.iter("query"):
             query_name = _sanitize_identifier(query.get("name") or "Query")
             table = Table(name=query_name, source_query=query_name)
@@ -119,6 +205,128 @@ class CognosReportParser:
                 self._parse_data_item(data_item, table, project)
             if table.columns or table.measures:
                 project.tables.append(table)
+            package_flagged = self._parse_query_source(query, table, project, package_flagged)
+            self._parse_detail_filters(query, table, project)
+
+    def _parse_query_source(
+        self,
+        query: etree._Element,
+        table: Table,
+        project: MigrationProject,
+        package_flagged: bool,
+    ) -> bool:
+        """Parse a query source: capture joins as relationships; flag derived/package sources."""
+        source = query.find("source")
+        if source is None:
+            return package_flagged
+        join_op = source.find("joinOperation")
+        if join_op is not None:
+            self._parse_join(join_op, table, project)
+            return package_flagged
+        query_ref = source.find("queryRef")
+        if query_ref is not None:
+            ref = _sanitize_identifier(query_ref.get("refQuery") or "source")
+            project.add_flag(
+                "derived-query",
+                f"Query '{table.name}' is derived from query '{ref}' (a Cognos query reference). "
+                "It was materialized as its own table; relate or replace it if you need a single "
+                "source of truth.",
+                Severity.INFO,
+            )
+            return package_flagged
+        if source.find("model") is not None and not package_flagged:
+            project.add_flag(
+                "package-source",
+                "The report binds to a Cognos package/model rather than a physical table. The "
+                "generated tables use parameterized Server/Database placeholders; point each "
+                "partition at the real table or view before refreshing.",
+                Severity.WARNING,
+            )
+            return True
+        return package_flagged
+
+    def _parse_join(self, join_op: etree._Element, table: Table, project: MigrationProject) -> None:
+        cardinalities: dict[str, str] = {}
+        for operand in join_op.iter("joinOperand"):
+            query_ref = operand.find("queryRef")
+            if query_ref is not None:
+                ref_name = _sanitize_identifier(query_ref.get("refQuery") or "")
+                cardinalities[ref_name] = (operand.get("cardinality") or "").strip()
+        for join_filter in join_op.iter("joinFilter"):
+            expression = join_filter.find("filterExpression")
+            text = expression.text.strip() if expression is not None and expression.text else ""
+            self._relationship_from_join(text, cardinalities, table, project)
+
+    def _relationship_from_join(
+        self,
+        filter_text: str,
+        cardinalities: dict[str, str],
+        table: Table,
+        project: MigrationProject,
+    ) -> None:
+        match = _JOIN_EQUALITY_RE.match(filter_text)
+        if not match:
+            if filter_text:
+                project.add_flag(
+                    "join-needs-review",
+                    f"The join for query '{table.name}' uses a condition that could not be mapped "
+                    "to a Power BI relationship and needs manual modeling.",
+                    Severity.WARNING,
+                    source_ref=filter_text,
+                )
+            return
+        left, right = match.group("left"), match.group("right")
+        left_parts = re.findall(r"\[([^\[\]]+)\]", left)
+        right_parts = re.findall(r"\[([^\[\]]+)\]", right)
+        if len(left_parts) < 2 or len(right_parts) < 2:
+            return
+        left_table = _sanitize_identifier(left_parts[0])
+        right_table = _sanitize_identifier(right_parts[0])
+        left_col = _sanitize_identifier(left_parts[-1])
+        right_col = _sanitize_identifier(right_parts[-1])
+        left_many = _cardinality_is_many(cardinalities.get(left_table, ""))
+        right_many = _cardinality_is_many(cardinalities.get(right_table, ""))
+        if right_many and not left_many:
+            from_table, from_col, to_table, to_col = right_table, right_col, left_table, left_col
+        else:
+            from_table, from_col, to_table, to_col = left_table, left_col, right_table, right_col
+        cardinality = (
+            Cardinality.MANY_TO_ONE if (left_many or right_many) else Cardinality.ONE_TO_ONE
+        )
+        project.relationships.append(
+            Relationship(
+                from_table=from_table,
+                from_column=from_col,
+                to_table=to_table,
+                to_column=to_col,
+                cardinality=cardinality,
+                name=f"{from_table}_{to_table}",
+            )
+        )
+        project.add_flag(
+            "join-relationship",
+            f"Added a relationship {from_table}[{from_col}] -> {to_table}[{to_col}] from the "
+            f"Cognos join in query '{table.name}'. Verify the cardinality and cross-filter "
+            "direction in Power BI.",
+            Severity.INFO,
+        )
+
+    def _parse_detail_filters(
+        self, query: etree._Element, table: Table, project: MigrationProject
+    ) -> None:
+        for detail_filters in query.findall("detailFilters"):
+            for detail_filter in detail_filters.iter("detailFilter"):
+                expression = detail_filter.find("filterExpression")
+                text = expression.text.strip() if expression is not None and expression.text else ""
+                if text:
+                    project.add_flag(
+                        "detail-filter",
+                        f"Query '{table.name}' has a Cognos detail filter that was not applied. "
+                        "Recreate it as a Power Query step, a report/page filter, or a measure "
+                        "filter as appropriate.",
+                        Severity.WARNING,
+                        source_ref=text,
+                    )
 
     def _parse_data_item(
         self, data_item: etree._Element, table: Table, project: MigrationProject
@@ -129,18 +337,65 @@ class CognosReportParser:
         cognos_expression = (
             expression_el.text.strip() if expression_el is not None and expression_el.text else None
         )
+        data_type = _infer_data_type(data_item, cognos_expression)
 
-        if aggregate in {"none", ""}:
+        if aggregate not in {"none", ""}:
+            self._add_measure(item_name, cognos_expression, aggregate, table, project)
+            return
+
+        # A plain reference (or cast of a reference) becomes a physical column.
+        if _is_reference_like(cognos_expression):
             table.columns.append(
                 Column(
                     name=item_name,
-                    data_type=_infer_data_type(data_item),
-                    source_column=item_name,
+                    data_type=data_type,
+                    source_column=_reference_source(cognos_expression, item_name),
                     cognos_expression=cognos_expression,
                 )
             )
             return
 
+        # A calculation. Emit a DAX calculated column only when the deterministic translation is
+        # confident, so the model always loads. Otherwise keep a loadable physical column and flag
+        # it (the AI stage may later replace it with a calculated column).
+        translation = translate_measure_expression(cognos_expression, table.name, "none")
+        if translation.confident and translation.dax:
+            table.columns.append(
+                Column(
+                    name=item_name,
+                    data_type=data_type,
+                    cognos_expression=cognos_expression,
+                    dax_expression=translation.dax,
+                    is_calculated=True,
+                )
+            )
+            return
+        project.add_flag(
+            "calculation-needs-review",
+            f"Data item '{item_name}' in query '{table.name}' is a Cognos calculation that has no "
+            "deterministic DAX mapping. It was kept as a physical column so the model loads; "
+            "recreate it as a DAX calculated column or measure (or run AI refinement).",
+            Severity.WARNING,
+            source_ref=cognos_expression,
+        )
+        table.columns.append(
+            Column(
+                name=item_name,
+                data_type=data_type,
+                source_column=item_name,
+                cognos_expression=cognos_expression,
+                needs_calculation=True,
+            )
+        )
+
+    def _add_measure(
+        self,
+        item_name: str,
+        cognos_expression: str | None,
+        aggregate: str,
+        table: Table,
+        project: MigrationProject,
+    ) -> None:
         translation = translate_measure_expression(
             cognos_expression or f"[{item_name}]",
             table.name,
@@ -198,9 +453,13 @@ class CognosReportParser:
         return Visual(visual_type=visual_type, fields=fields)
 
 
-def _is_simple_reference(expression: str) -> bool:
-    """Return True when a Cognos expression is a plain qualified reference like [A].[B].[C]."""
-    return bool(re.fullmatch(r"\[[^\[\]]+\](?:\.\[[^\[\]]+\])*", expression.strip()))
+def _cardinality_is_many(cardinality: str) -> bool:
+    """Return True when a Cognos join cardinality string denotes a many side (n, *, or 1:n)."""
+    text = cardinality.strip().lower()
+    if not text:
+        return False
+    right = text.split(":")[-1] if ":" in text else text
+    return right in {"n", "*", "many"} or right not in {"0", "1"}
 
 
 def parse_report(path: str | Path) -> MigrationProject:

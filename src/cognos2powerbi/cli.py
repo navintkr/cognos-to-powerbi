@@ -56,6 +56,16 @@ _INFER_MODEL_OPTION = click.option(
     show_default=True,
     help="Classify fact/dimension tables and infer relationship cardinality (star schema).",
 )
+_AI_OPTION = click.option(
+    "--ai",
+    type=click.Choice(["claude", "copilot", "codex", "azure", "none"], case_sensitive=False),
+    default="none",
+    show_default=True,
+    help=(
+        "AI provider used to refine expressions that have no deterministic mapping "
+        "('azure' uses Azure OpenAI)."
+    ),
+)
 
 
 def _build_data_source(
@@ -114,13 +124,7 @@ def cli() -> None:
     type=click.Path(file_okay=False, path_type=Path),
     help="Output directory for the generated Power BI Project.",
 )
-@click.option(
-    "--ai",
-    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
-    default="none",
-    show_default=True,
-    help="AI provider used to refine expressions that have no deterministic mapping.",
-)
+@_AI_OPTION
 @_SOURCE_TYPE_OPTION
 @_SERVER_OPTION
 @_DATABASE_OPTION
@@ -152,13 +156,7 @@ def migrate(
     type=click.Path(file_okay=False, path_type=Path),
     help="Output directory for the generated Power BI Project.",
 )
-@click.option(
-    "--ai",
-    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
-    default="none",
-    show_default=True,
-    help="AI provider used to refine expressions that have no deterministic mapping.",
-)
+@_AI_OPTION
 @_SOURCE_TYPE_OPTION
 @_SERVER_OPTION
 @_DATABASE_OPTION
@@ -192,13 +190,7 @@ def migrate_model(
     type=click.Path(file_okay=False, path_type=Path),
     help="Output directory for the generated Power BI Project.",
 )
-@click.option(
-    "--ai",
-    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
-    default="none",
-    show_default=True,
-    help="AI provider used to refine expressions that have no deterministic mapping.",
-)
+@_AI_OPTION
 @_SOURCE_TYPE_OPTION
 @_SERVER_OPTION
 @_DATABASE_OPTION
@@ -232,13 +224,7 @@ def migrate_module(
     type=click.Path(file_okay=False, path_type=Path),
     help="Output directory for the generated Power BI Project.",
 )
-@click.option(
-    "--ai",
-    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
-    default="none",
-    show_default=True,
-    help="AI provider used to refine expressions that have no deterministic mapping.",
-)
+@_AI_OPTION
 @_SOURCE_TYPE_OPTION
 @_SERVER_OPTION
 @_DATABASE_OPTION
@@ -277,13 +263,7 @@ def migrate_dashboard(
     type=click.Path(file_okay=False, path_type=Path),
     help="Output directory for the generated Power BI Projects and coverage report.",
 )
-@click.option(
-    "--ai",
-    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
-    default="none",
-    show_default=True,
-    help="AI provider used to refine expressions that have no deterministic mapping.",
-)
+@_AI_OPTION
 @click.option(
     "--recursive/--no-recursive",
     default=True,
@@ -364,12 +344,12 @@ def _print_batch_summary(batch: BatchResult) -> None:
 @cli.command()
 @click.option(
     "--ai",
-    type=click.Choice(["claude", "copilot", "codex", "none"], case_sensitive=False),
+    type=click.Choice(["claude", "copilot", "codex", "azure", "none"], case_sensitive=False),
     default=None,
     help="Provider to check. Defaults to COGNOS2PBI_AI_PROVIDER.",
 )
 def doctor(ai: str | None) -> None:
-    """Check that the selected AI provider CLI is available."""
+    """Check that the selected AI provider is available."""
     provider = get_provider(ai)
     if provider.name == "none":
         console.print("AI refinement is [bold]disabled[/bold] (provider: none).")
@@ -377,7 +357,7 @@ def doctor(ai: str | None) -> None:
     if provider.is_available():
         console.print(f"[green]Provider '{provider.name}' is available.[/green]")
     else:
-        console.print(f"[red]Provider '{provider.name}' CLI was not found on PATH.[/red]")
+        console.print(f"[red]Provider '{provider.name}' is not available or not configured.[/red]")
         sys.exit(1)
 
 

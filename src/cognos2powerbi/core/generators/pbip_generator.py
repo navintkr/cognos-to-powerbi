@@ -155,6 +155,18 @@ class PbipGenerator:
             lines.append(f"\tdataCategory: {table.data_category}")
         lines.append("")
         for column in table.columns:
+            if column.is_calculated and column.dax_expression:
+                dax = _dax_single_line(column.dax_expression)
+                lines.append(f"\tcolumn {_escape_tmdl_name(column.name)} = {dax}")
+                lines.append(f"\t\tdataType: {column.data_type.value}")
+                if column.is_hidden:
+                    lines.append("\t\tisHidden")
+                if column.summarize_by:
+                    lines.append(f"\t\tsummarizeBy: {column.summarize_by}")
+                if column.data_category:
+                    lines.append(f"\t\tdataCategory: {column.data_category}")
+                lines.append("")
+                continue
             lines.append(f"\tcolumn {_escape_tmdl_name(column.name)}")
             lines.append(f"\t\tdataType: {column.data_type.value}")
             lines.append(f"\t\tsourceColumn: {column.source_column or column.name}")
@@ -166,7 +178,11 @@ class PbipGenerator:
                 lines.append(f"\t\tdataCategory: {column.data_category}")
             lines.append("")
         for measure in table.measures:
-            expression = measure.dax_expression or '"TODO: translate Cognos expression"'
+            expression = (
+                _dax_single_line(measure.dax_expression)
+                if measure.dax_expression
+                else '"TODO: translate Cognos expression"'
+            )
             lines.append(f"\tmeasure {_escape_tmdl_name(measure.name)} = {expression}")
             if measure.format_string:
                 lines.append(f"\t\tformatString: {measure.format_string}")
@@ -297,6 +313,20 @@ def _escape_tmdl_name(name: str) -> str:
     if name and _TMDL_BARE_IDENTIFIER.match(name):
         return name
     return "'" + name.replace("'", "''") + "'"
+
+
+def _dax_single_line(expression: str) -> str:
+    """Collapse a DAX expression to a single line.
+
+    TMDL renders an inline ``column X = <expr>`` / ``measure X = <expr>`` on one line. A multi-line
+    expression (for example from an AI provider) would break TMDL indentation, so newlines and runs
+    of whitespace are collapsed to single spaces. ``//`` and ``/* */`` comments are removed first so
+    collapsing does not comment out the rest. DAX is whitespace-insensitive between tokens, so this
+    preserves the semantics.
+    """
+    without_line_comments = re.sub(r"//[^\n]*", " ", expression)
+    without_block_comments = re.sub(r"/\*.*?\*/", " ", without_line_comments, flags=re.DOTALL)
+    return re.sub(r"\s+", " ", without_block_comments).strip()
 
 
 def _write_json(path: Path, data: dict) -> None:
