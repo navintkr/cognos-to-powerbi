@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-07-16
+
+### Fixed
+
+- Matched the PBIR report files to the exact schema versions current Power BI Desktop writes
+  (validated against a real Desktop-saved project): `report.json` schema 3.1.0 with an object
+  `reportVersionAtImport` and no `layoutOptimization`, `page.json` schema 2.0.0, and
+  `visualContainer` schema 2.0.0. The previous 1.0.0-shaped files were rejected, so Power BI failed
+  to build the report (`Cannot read properties of undefined (reading 'visualContainers')`) even for
+  an empty page. Auto-placed visuals are re-enabled now that the format is confirmed.
+
 ## [0.4.3] - 2026-07-16
 
 ### Changed

@@ -59,7 +59,7 @@ _PBIR_VERSION_SCHEMA = (
 )
 _PBIR_REPORT_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/"
-    "definition/report/1.0.0/schema.json"
+    "definition/report/3.1.0/schema.json"
 )
 _PBIR_PAGES_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/"
@@ -67,15 +67,24 @@ _PBIR_PAGES_SCHEMA = (
 )
 _PBIR_PAGE_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/"
-    "definition/page/1.0.0/schema.json"
+    "definition/page/2.0.0/schema.json"
 )
 _PBIR_VISUAL_SCHEMA = (
     "https://developer.microsoft.com/json-schemas/fabric/item/report/"
-    "definition/visualContainer/1.0.0/schema.json"
+    "definition/visualContainer/2.0.0/schema.json"
 )
-# A built-in (SharedResources) base theme shipped with Power BI.
-_BASE_THEME_NAME = "CY24SU10"
-_BASE_THEME_VERSION = "5.55"
+# A built-in (SharedResources) base theme shipped with Power BI, and the report-format versions
+# recorded at import time. These mirror what current Power BI Desktop writes.
+_BASE_THEME_NAME = "CY25SU12"
+_BASE_THEME_VERSION_AT_IMPORT = {"visual": "2.5.0", "report": "3.1.0", "page": "2.3.0"}
+_REPORT_SETTINGS = {
+    "useStylableVisualContainerHeader": True,
+    "defaultFilterActionIsDataFilter": True,
+    "defaultDrillFilterOtherVisuals": True,
+    "allowChangeFilterTypes": True,
+    "allowInlineExploration": True,
+    "useEnhancedTooltips": True,
+}
 
 _CHART_VISUAL_TYPES = {
     VisualType.COLUMN_CHART,
@@ -88,10 +97,8 @@ _CHART_VISUAL_TYPES = {
 class PbipGenerator:
     """Render a migration project to PBIP files on disk."""
 
-    # Auto-placed PBIR visuals are still being matched to the exact format current Power BI Desktop
-    # writes; until then the report opens with pages and an empty canvas (the model is complete and
-    # visuals can be dragged in). Set True to also emit visual.json files.
-    emit_visuals: bool = False
+    # Auto-placed PBIR visuals now match the format current Power BI Desktop writes (schema 2.0.0).
+    emit_visuals: bool = True
 
     def generate(self, project: MigrationProject, out_dir: str | Path) -> Path:
         root = Path(out_dir)
@@ -287,11 +294,11 @@ class PbipGenerator:
                 "themeCollection": {
                     "baseTheme": {
                         "name": _BASE_THEME_NAME,
-                        "reportVersionAtImport": _BASE_THEME_VERSION,
+                        "reportVersionAtImport": _BASE_THEME_VERSION_AT_IMPORT,
                         "type": "SharedResources",
                     }
                 },
-                "layoutOptimization": "None",
+                "settings": _REPORT_SETTINGS,
             },
         )
         self._write_pages(definition / "pages", project)
@@ -343,6 +350,7 @@ class PbipGenerator:
         query_state = self._build_query_state(visual, project)
         if query_state:
             visual_config["query"] = {"queryState": query_state}
+        visual_config["drillFilterOtherVisuals"] = True
         _write_json(
             visual_dir / "visual.json",
             {
@@ -351,7 +359,7 @@ class PbipGenerator:
                 "position": {
                     "x": visual.x,
                     "y": visual.y,
-                    "z": 0,
+                    "z": 1000,
                     "width": visual.width,
                     "height": visual.height,
                     "tabOrder": 0,
@@ -368,7 +376,7 @@ class PbipGenerator:
                 {
                     "field": self._field_expression(field, project),
                     "queryRef": f"{field.table}.{field.name}",
-                    "nativeQueryRef": field.name,
+                    "active": True,
                 }
             )
         return {

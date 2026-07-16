@@ -34,15 +34,8 @@ def test_pbip_root_is_valid_json(tmp_path: Path) -> None:
 
 
 def test_pbir_visual_has_query_projections(tmp_path: Path) -> None:
-    from cognos2powerbi.core.generators.pbip_generator import PbipGenerator
-    from cognos2powerbi.core.parsers import parse_report
-
-    # Visual emission is opt-in while the exact Power BI Desktop visual format is confirmed.
-    project = parse_report(EXAMPLE)
-    generator = PbipGenerator()
-    generator.emit_visuals = True
-    generator.generate(project, tmp_path)
-    pages = tmp_path / f"{project.name}.Report" / "definition" / "pages"
+    result = run_migration(EXAMPLE, tmp_path, ai="none")
+    pages = tmp_path / f"{result.project_name}.Report" / "definition" / "pages"
     visual_files = list(pages.glob("*/visuals/*/visual.json"))
     assert visual_files, "expected at least one PBIR visual.json"
     visual = json.loads(visual_files[0].read_text(encoding="utf-8"))
@@ -57,13 +50,20 @@ def test_pbir_visual_has_query_projections(tmp_path: Path) -> None:
     assert container["Property"]
 
 
-def test_pbir_pages_open_without_visuals_by_default(tmp_path: Path) -> None:
+def test_pbir_report_uses_current_schema_versions(tmp_path: Path) -> None:
     result = run_migration(EXAMPLE, tmp_path, ai="none")
-    pages = tmp_path / f"{result.project_name}.Report" / "definition" / "pages"
-    page_json = list(pages.glob("*/page.json"))
-    assert page_json, "expected at least one PBIR page.json"
-    # By default no visual.json files are emitted (report opens with an empty canvas).
-    assert not list(pages.glob("*/visuals/*/visual.json"))
+    definition = tmp_path / f"{result.project_name}.Report" / "definition"
+    report = json.loads((definition / "report.json").read_text(encoding="utf-8"))
+    # Current Power BI Desktop uses report schema 3.x with an object reportVersionAtImport and no
+    # layoutOptimization; an older 1.0.0-shaped report.json is rejected and fails to open.
+    assert "/report/3." in report["$schema"]
+    assert isinstance(report["themeCollection"]["baseTheme"]["reportVersionAtImport"], dict)
+    assert "layoutOptimization" not in report
+    page = json.loads(next(definition.glob("pages/*/page.json")).read_text(encoding="utf-8"))
+    assert "/page/2." in page["$schema"]
+    visual_file = next(definition.glob("pages/*/visuals/*/visual.json"))
+    visual = json.loads(visual_file.read_text(encoding="utf-8"))
+    assert "/visualContainer/2." in visual["$schema"]
 
 
 def test_pbip_schema_matches_power_bi_pattern(tmp_path: Path) -> None:

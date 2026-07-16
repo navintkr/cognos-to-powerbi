@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cognos2powerbi"
-version = "0.4.3"
+version = "0.4.4"
 description = "Open-source tool to migrate IBM Cognos reports and models to Microsoft Power BI (PBIP / TMDL / PBIR) with AI assistance."
 readme = "README.md"
 requires-python = ">=3.10"
