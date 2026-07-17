@@ -51,13 +51,14 @@ Authentication order:
    `az login` and ensure your identity has the `Cognitive Services OpenAI User` role on the
    resource. No key is stored by this tool.
 
-Configuration (all optional; sensible defaults are built in):
+Configuration (`COGNOS2PBI_AOAI_ENDPOINT` and `COGNOS2PBI_AOAI_DEPLOYMENT` are required for the
+azure provider; no endpoint is built into the package):
 
 | Variable | Purpose |
 | --- | --- |
-| `COGNOS2PBI_AOAI_ENDPOINT` | Azure OpenAI resource endpoint URL. |
-| `COGNOS2PBI_AOAI_DEPLOYMENT` | Deployment (model) name to call. |
-| `COGNOS2PBI_AOAI_API_VERSION` | REST API version. |
+| `COGNOS2PBI_AOAI_ENDPOINT` | Azure OpenAI resource endpoint URL (required). |
+| `COGNOS2PBI_AOAI_DEPLOYMENT` | Deployment (model) name to call (required). |
+| `COGNOS2PBI_AOAI_API_VERSION` | REST API version (defaults to a recent version). |
 | `COGNOS2PBI_AOAI_API_KEY` | API key, if you prefer key auth over Entra ID. |
 
 ## How it works

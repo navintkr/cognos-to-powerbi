@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-07-16
+
+### Changed
+
+- Removed the built-in Azure OpenAI endpoint and deployment defaults from the package. The `azure`
+  provider now requires `COGNOS2PBI_AOAI_ENDPOINT` and `COGNOS2PBI_AOAI_DEPLOYMENT` to be set (see
+  `.env.example`), so no specific resource is embedded in the published code.
+
 ## [0.4.5] - 2026-07-16
 
 ### Fixed

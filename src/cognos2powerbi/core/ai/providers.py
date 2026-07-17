@@ -21,9 +21,9 @@ from cognos2powerbi.core.ai.base import AiProvider, AiRequest, AiResult, NullPro
 
 _DEFAULT_TIMEOUT = int(os.environ.get("COGNOS2PBI_AI_TIMEOUT", "120"))
 
-# Default Azure OpenAI target. Override any of these with the matching environment variable.
-_DEFAULT_AOAI_ENDPOINT = "https://gmadbheal-aoai-nuez2i.openai.azure.com/"
-_DEFAULT_AOAI_DEPLOYMENT = "gpt-5.4"
+# Azure OpenAI target. There is no built-in endpoint or deployment: set them per environment so no
+# private resource is embedded in the package. Configure COGNOS2PBI_AOAI_ENDPOINT and
+# COGNOS2PBI_AOAI_DEPLOYMENT (see .env.example).
 _DEFAULT_AOAI_API_VERSION = "2024-10-21"
 _AOAI_SCOPE = "https://cognitiveservices.azure.com/.default"
 
@@ -121,8 +121,8 @@ class AzureOpenAiProvider(AiProvider):
     name = "azure"
 
     def __init__(self) -> None:
-        self._endpoint = os.environ.get("COGNOS2PBI_AOAI_ENDPOINT", _DEFAULT_AOAI_ENDPOINT)
-        self._deployment = os.environ.get("COGNOS2PBI_AOAI_DEPLOYMENT", _DEFAULT_AOAI_DEPLOYMENT)
+        self._endpoint = os.environ.get("COGNOS2PBI_AOAI_ENDPOINT", "").strip()
+        self._deployment = os.environ.get("COGNOS2PBI_AOAI_DEPLOYMENT", "").strip()
         self._api_version = os.environ.get("COGNOS2PBI_AOAI_API_VERSION", _DEFAULT_AOAI_API_VERSION)
         self._api_key = os.environ.get("COGNOS2PBI_AOAI_API_KEY") or os.environ.get(
             "AZURE_OPENAI_API_KEY"
@@ -137,6 +137,9 @@ class AzureOpenAiProvider(AiProvider):
 
     def is_available(self) -> bool:
         if not self._sdk_present():
+            return False
+        # An endpoint and deployment must be configured; nothing is baked into the package.
+        if not self._endpoint or not self._deployment:
             return False
         if self._api_key:
             return True
