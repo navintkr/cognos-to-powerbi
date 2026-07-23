@@ -105,6 +105,16 @@ def _last_segment(reference: str) -> str:
     return _sanitize_identifier(parts[-1]) if parts else reference.strip("[]")
 
 
+def _has_ancestor(element: etree._Element, tag: str) -> bool:
+    """Return True if ``element`` has an ancestor with the given tag."""
+    parent = element.getparent()
+    while parent is not None:
+        if parent.tag == tag:
+            return True
+        parent = parent.getparent()
+    return False
+
+
 def _rs_data_type(data_item: etree._Element) -> DataType | None:
     """Return the TMDL type implied by an ``RS_dataType`` XML attribute, if present."""
     for attr in data_item.iter("XMLAttribute"):
@@ -429,7 +439,33 @@ class CognosReportParser:
             for layout_tag, visual_type in _LAYOUT_TO_VISUAL.items():
                 for obj in page.iter(layout_tag):
                     report_page.visuals.append(self._build_visual(obj, visual_type, project))
+            self._collect_static_text(page, report_page)
             project.pages.append(report_page)
+
+    @staticmethod
+    def _collect_static_text(page: etree._Element, report_page: ReportPage) -> None:
+        """Capture layout static text (letterhead/signature) split into before/after the data list.
+
+        Static text that appears before the first list becomes header text; text after it becomes
+        footer text. Text inside a list (for example a no-data message) is ignored.
+        """
+        seen_list = False
+        for element in page.iter():
+            tag = element.tag if isinstance(element.tag, str) else ""
+            if tag == "list":
+                seen_list = True
+                continue
+            if tag != "staticValue":
+                continue
+            text = (element.text or "").strip()
+            if not text:
+                continue
+            if _has_ancestor(element, "list"):
+                continue
+            if seen_list:
+                report_page.footer_texts.append(text)
+            else:
+                report_page.header_texts.append(text)
 
     def _build_visual(
         self, obj: etree._Element, visual_type: VisualType, project: MigrationProject

@@ -208,6 +208,8 @@ class ReportPage(BaseModel):
     name: str
     display_name: str
     visuals: list[Visual] = Field(default_factory=list)
+    header_texts: list[str] = Field(default_factory=list)
+    footer_texts: list[str] = Field(default_factory=list)
 
 
 class MigrationProject(BaseModel):

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from cognos2powerbi.core.ai import AiProvider, AiRequest, get_provider
 from cognos2powerbi.core.detect import SourceKind, detect_source_file
-from cognos2powerbi.core.generators import generate_pbip
+from cognos2powerbi.core.generators import generate_pbip, generate_rdl
 from cognos2powerbi.core.ir.models import (
     DataSource,
     MigrationProject,
@@ -136,10 +136,18 @@ def _run(
     data_source: DataSource | None,
     infer_model: bool,
     source_kind: str,
+    output_format: str = "pbip",
 ) -> MigrationResult:
     """Shared migration tail: model inference, AI refinement, and generation."""
     if data_source is not None:
         project.data_source = data_source
+
+    if output_format == "rdl":
+        # RDL is a paginated report backed by a SQL dataset, so it needs neither the star-schema
+        # modeling pass nor Cognos-to-DAX refinement. The list and letterhead are emitted directly.
+        rdl_path = generate_rdl(project, out_dir)
+        return _build_result(project, rdl_path, 0, "none", 0, None, source_kind)
+
     summary = analyze_model(project) if infer_model else None
     provider = get_provider(ai)
     refinements = _refine_with_ai(project, provider)
@@ -157,21 +165,31 @@ def run_migration(
     ai: str | None = None,
     data_source: DataSource | None = None,
     infer_model: bool = True,
+    output_format: str = "pbip",
 ) -> MigrationResult:
     """Run the full migration for a single Cognos report specification.
 
     Args:
         source: Path to the Cognos report specification XML.
-        out_dir: Directory to write the Power BI Project into.
+        out_dir: Directory to write the output into.
         ai: AI provider name (``claude``, ``copilot``, ``codex``, or ``none``).
         data_source: Optional physical data source used for generated Power Query partitions.
         infer_model: Run the star-schema modeling pass (classify tables, infer relationships).
+        output_format: Target output format, ``pbip`` (default) or ``rdl`` (paginated report).
 
     Returns:
         A :class:`MigrationResult` summarizing the migration.
     """
     project = parse_report(source)
-    return _run(project, out_dir, ai, data_source, infer_model, SourceKind.REPORT.value)
+    return _run(
+        project,
+        out_dir,
+        ai,
+        data_source,
+        infer_model,
+        SourceKind.REPORT.value,
+        output_format=output_format,
+    )
 
 
 def run_model_migration(

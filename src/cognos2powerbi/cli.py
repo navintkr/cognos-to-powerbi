@@ -80,11 +80,11 @@ def _build_data_source(
     )
 
 
-def _print_summary(result: MigrationResult, out_dir: Path) -> None:
+def _print_summary(result: MigrationResult, out_dir: Path, output_format: str = "pbip") -> None:
     summary = RichTable(show_header=False, box=None, pad_edge=False)
     summary.add_row("Project", result.project_name)
     summary.add_row("Source kind", result.source_kind)
-    summary.add_row("PBIP", result.pbip_path)
+    summary.add_row("RDL" if output_format == "rdl" else "PBIP", result.pbip_path)
     summary.add_row("Tables", str(result.table_count))
     summary.add_row(
         "Facts / Dimensions / Date",
@@ -152,7 +152,15 @@ def cli() -> None:
     "out_dir",
     required=True,
     type=click.Path(file_okay=False, path_type=Path),
-    help="Output directory for the generated Power BI Project.",
+    help="Output directory for the generated report.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["pbip", "rdl"], case_sensitive=False),
+    default="pbip",
+    show_default=True,
+    help="Output format: 'pbip' (semantic model + report) or 'rdl' (paginated report).",
 )
 @_AI_OPTION
 @_SOURCE_TYPE_OPTION
@@ -163,6 +171,7 @@ def cli() -> None:
 def migrate(
     source: Path,
     out_dir: Path,
+    output_format: str,
     ai: str,
     source_type: str,
     server: str,
@@ -170,11 +179,18 @@ def migrate(
     schema_name: str,
     infer_model: bool,
 ) -> None:
-    """Migrate a single Cognos report specification to a Power BI Project."""
+    """Migrate a single Cognos report specification to a Power BI Project or RDL report."""
     console.print(f"[bold]Migrating[/bold] {source}")
     data_source = _build_data_source(source_type, server, database, schema_name)
-    result = run_migration(source, out_dir, ai=ai, data_source=data_source, infer_model=infer_model)
-    _print_summary(result, out_dir)
+    result = run_migration(
+        source,
+        out_dir,
+        ai=ai,
+        data_source=data_source,
+        infer_model=infer_model,
+        output_format=output_format.lower(),
+    )
+    _print_summary(result, out_dir, output_format=output_format.lower())
 
 
 @cli.command(name="migrate-model")

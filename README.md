@@ -66,6 +66,9 @@ pip install cognos2powerbi
 # Convert a single Cognos report specification to a Power BI project
 cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport
 
+# Convert a Cognos report to a Report Builder paginated report (.rdl)
+cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport --format rdl
+
 # Point the generated model at your database (refreshable PBIP)
 cognos2pbi migrate ./examples/sample_report.xml --out ./out/SalesReport \
   --server sql01.contoso.com --database Sales

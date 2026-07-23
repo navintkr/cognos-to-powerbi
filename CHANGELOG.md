@@ -7,7 +7,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-07-23
+## [0.6.0] - 2026-07-23
+
+### Added
+
+- RDL output format for reports: `cognos2pbi migrate --format rdl` emits a Power BI Report Builder
+  paginated report (`.rdl`, RDL 2016 schema) instead of a PBIP semantic model. This is the required
+  deliverable for the GM Financial engagement. The generator maps the Cognos list to a `Tablix`
+  bound to a SQL `DataSet` (columns and order taken from the list), reproduces letterhead and
+  signature text as native `Textbox` items (greeting above the table, closing below), and records
+  the physical source query and untranslated detail filters as SQL comments in the dataset
+  `CommandText` for a human to complete. `--format pbip` (default) is unchanged.
+- Report parser now captures layout static text (letterhead/signature) per page, split into header
+  text (before the data list) and footer text (after it), on `ReportPage.header_texts` and
+  `ReportPage.footer_texts`.
 
 ### Added
 
