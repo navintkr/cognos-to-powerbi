@@ -65,6 +65,16 @@ def test_honest_flags_for_filters_and_package_source() -> None:
     assert "package-source" in codes
 
 
+def test_list_visual_binds_exact_columns_in_order() -> None:
+    project = parse_report(EXAMPLE)
+    page = project.pages[0]
+    visual = page.visuals[0]
+    # The list declares only Order Date then Customer Code; the visual must match that selection
+    # and order, not bind every column of the query.
+    names = [field.name for field in visual.fields]
+    assert names == ["Order Date", "Customer Code"]
+
+
 def test_calculated_column_renders_in_tmdl(tmp_path: Path) -> None:
     result = run_migration(EXAMPLE, tmp_path, ai="none", infer_model=False)
     tmdl = (

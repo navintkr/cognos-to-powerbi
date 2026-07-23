@@ -18,7 +18,7 @@ welcome.
 | Query join (`joinOperation`) | Relationship (oriented from the many side) | Available |
 | Derived query (`queryRef`) | Table, flagged to relate or replace | Partial |
 | Detail filters | Flagged for review (manual Power Query / report filter) | Planned |
-| List | Table visual | Available |
+| List | Table visual (exact columns, in list order, page-sized) | Available |
 | Crosstab | Matrix visual | Partial |
 | Column / bar / line / pie chart | Corresponding Power BI visual | Partial |
 | Page | Report page | Available |

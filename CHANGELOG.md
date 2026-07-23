@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-23
+
+### Added
+
+- Report layout fidelity for lists: the generated table visual now binds exactly the columns the
+  Cognos list shows, in the same order (read from the list's `listColumn` definitions), and is
+  sized to fill the page instead of a small default tile. Previously every query column was bound in
+  arbitrary order.
+
 ## [0.4.6] - 2026-07-16
 
 ### Changed

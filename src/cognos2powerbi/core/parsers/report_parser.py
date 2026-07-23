@@ -440,17 +440,59 @@ class CognosReportParser:
             table_name = _sanitize_identifier(ref_query)
             table = next((t for t in project.tables if t.name == table_name), None)
             if table:
-                for column in table.columns:
-                    fields.append(VisualField(table=table_name, name=column.name, role="rows"))
-                for measure in table.measures:
-                    fields.append(VisualField(table=table_name, name=measure.name, role="values"))
+                fields = self._visual_fields(obj, table)
         else:
             project.add_flag(
                 "visual-unbound",
                 f"A {visual_type.value} visual has no query reference and needs manual binding.",
                 Severity.WARNING,
             )
+        # Tables and matrices are the main content of a Cognos list report; size them to fill the
+        # page so the layout resembles the source instead of a small default tile.
+        if visual_type in {VisualType.TABLE, VisualType.MATRIX}:
+            return Visual(
+                visual_type=visual_type, fields=fields, x=24.0, y=24.0, width=1232.0, height=672.0
+            )
         return Visual(visual_type=visual_type, fields=fields)
+
+    def _visual_fields(self, obj: etree._Element, table: Table) -> list[VisualField]:
+        """Bind the visual to exactly the columns the Cognos layout shows, in their shown order.
+
+        A Cognos list declares its columns (and order) via ``listColumn`` entries. When present we
+        honor that selection and order; otherwise we fall back to every column then measure.
+        """
+        column_names = {column.name for column in table.columns}
+        measure_names = {measure.name for measure in table.measures}
+        fields: list[VisualField] = []
+        seen: set[str] = set()
+        for ref in self._layout_column_refs(obj):
+            if ref in seen or (ref not in column_names and ref not in measure_names):
+                continue
+            seen.add(ref)
+            role = "values" if ref in measure_names else "rows"
+            fields.append(VisualField(table=table.name, name=ref, role=role))
+        if fields:
+            return fields
+        for column in table.columns:
+            fields.append(VisualField(table=table.name, name=column.name, role="rows"))
+        for measure in table.measures:
+            fields.append(VisualField(table=table.name, name=measure.name, role="values"))
+        return fields
+
+    @staticmethod
+    def _layout_column_refs(obj: etree._Element) -> list[str]:
+        """Return the ordered data-item names referenced by a list's columns."""
+        refs: list[str] = []
+        for column in obj.iter("listColumn"):
+            ref = None
+            for tag in ("dataItemValue", "dataItemLabel"):
+                cell = column.find(f".//{tag}")
+                if cell is not None and cell.get("refDataItem"):
+                    ref = _sanitize_identifier(cell.get("refDataItem"))
+                    break
+            if ref:
+                refs.append(ref)
+        return refs
 
 
 def _cardinality_is_many(cardinality: str) -> bool:

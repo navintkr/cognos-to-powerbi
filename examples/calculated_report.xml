@@ -76,7 +76,26 @@
         <page name="Page1">
           <pageBody>
             <contents>
-              <list refQuery="Orders"/>
+              <list refQuery="Orders" name="List1">
+                <listColumns>
+                  <listColumn>
+                    <listColumnTitle>
+                      <contents><textItem><dataSource><dataItemLabel refDataItem="Order Date"/></dataSource></textItem></contents>
+                    </listColumnTitle>
+                    <listColumnBody>
+                      <contents><textItem><dataSource><dataItemValue refDataItem="Order Date"/></dataSource></textItem></contents>
+                    </listColumnBody>
+                  </listColumn>
+                  <listColumn>
+                    <listColumnTitle>
+                      <contents><textItem><dataSource><dataItemLabel refDataItem="Customer Code"/></dataSource></textItem></contents>
+                    </listColumnTitle>
+                    <listColumnBody>
+                      <contents><textItem><dataSource><dataItemValue refDataItem="Customer Code"/></dataSource></textItem></contents>
+                    </listColumnBody>
+                  </listColumn>
+                </listColumns>
+              </list>
             </contents>
           </pageBody>
         </page>
