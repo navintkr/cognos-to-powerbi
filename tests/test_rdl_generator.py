@@ -12,7 +12,9 @@ from cognos2powerbi.core.ir.models import (
     DataType,
     MigrationProject,
     ReportPage,
+    Style,
     Table,
+    TextBlock,
     Visual,
     VisualField,
     VisualType,
@@ -40,8 +42,8 @@ def _project() -> MigrationProject:
     page = ReportPage(
         name="Page1",
         display_name="Page1",
-        header_texts=["Buen dia,"],
-        footer_texts=["Cordialmente,", "GM FINANCIAL"],
+        header_blocks=[TextBlock(text="Buen dia,")],
+        footer_blocks=[TextBlock(text="Cordialmente,"), TextBlock(text="GM FINANCIAL")],
         visuals=[
             Visual(
                 visual_type=VisualType.TABLE,
@@ -153,3 +155,18 @@ def test_pipeline_rdl_format_writes_rdl(tmp_path: Path) -> None:
     assert result.pbip_path.endswith(".rdl")
     assert Path(result.pbip_path).is_file()
     etree.parse(result.pbip_path)
+
+
+def test_rdl_applies_extracted_styles(tmp_path: Path) -> None:
+    # A styled letterhead block and a right-aligned data cell must carry through to the RDL.
+    project = _project()
+    page = project.pages[0]
+    page.header_blocks = [
+        TextBlock(text="Buen dia,", style=Style(font_family="Times New Roman", font_size_pt=14.0))
+    ]
+    page.visuals[0].fields[0].cell_style = Style(text_align="Right")
+    out = generate_rdl(project, tmp_path)
+    text = out.read_text(encoding="utf-8")
+    assert "<FontFamily>Times New Roman</FontFamily>" in text
+    assert "<FontSize>14pt</FontSize>" in text
+    assert "<TextAlign>Right</TextAlign>" in text

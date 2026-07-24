@@ -7,6 +7,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-24
+
+### Added
+
+- Cognos style extraction with RDL style mapping. The report parser now reads the presentation
+  styles Cognos sets on letterhead text and list columns, from inline ``<CSS>`` declarations
+  (font-family, font-size, font-weight, font-style, color, background-color, text-align,
+  vertical-align, text-decoration) and from well-known named style classes (``refStyle``, for
+  example ``lt`` for list titles). These are captured on a new ``Style`` model and carried through
+  ``ReportPage.header_blocks``/``footer_blocks`` and ``VisualField.header_style``/``cell_style``.
+  The RDL generator applies them to the Textbox, TextRun, and Paragraph styles, so the generated
+  report matches the source fonts, sizes, colors, and alignment instead of a single templated
+  font. Generator defaults (Arial, the branded blue header) still fill in anything the source does
+  not specify.
+
+### Changed
+
+- ``ReportPage.header_texts``/``footer_texts`` (list of strings) are replaced by
+  ``header_blocks``/``footer_blocks`` (list of ``TextBlock`` with text plus style).
+
 ## [0.6.2] - 2026-07-24
 
 ### Fixed

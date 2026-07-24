@@ -29,7 +29,9 @@ from cognos2powerbi.core.ir.models import (
     Relationship,
     ReportPage,
     Severity,
+    Style,
     Table,
+    TextBlock,
     Visual,
     VisualField,
     VisualType,
@@ -113,6 +115,105 @@ def _has_ancestor(element: etree._Element, tag: str) -> bool:
             return True
         parent = parent.getparent()
     return False
+
+
+# Default presentation for well-known Cognos style classes (refStyle). Their full definitions live
+# in the Cognos global theme, not the report XML, so we encode the visually significant defaults for
+# the classes seen in the field. Unknown classes are ignored (they fall back to generator defaults).
+_REFSTYLE_DEFAULTS: dict[str, dict[str, object]] = {
+    # List column title: bold, horizontally centered (the default Cognos list header treatment).
+    "lt": {"bold": True, "text_align": "Center"},
+}
+
+# CSS length in points. Cognos emits pt directly; px is converted with the common 0.75pt/px ratio.
+_CSS_SIZE_RE = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*(pt|px)?\s*$", re.IGNORECASE)
+_CSS_ALIGN = {"left": "Left", "center": "Center", "right": "Right", "justify": "Justify"}
+_CSS_VALIGN = {"top": "Top", "middle": "Middle", "bottom": "Bottom"}
+
+
+def _css_declarations(css_text: str) -> dict[str, str]:
+    """Split a CSS ``value`` string into a lowercase-keyed declaration map."""
+    out: dict[str, str] = {}
+    for declaration in css_text.split(";"):
+        if ":" not in declaration:
+            continue
+        prop, _, value = declaration.partition(":")
+        prop = prop.strip().lower()
+        value = value.strip()
+        if prop and value:
+            out[prop] = value
+    return out
+
+
+def _css_size_pt(value: str) -> float | None:
+    match = _CSS_SIZE_RE.match(value)
+    if not match:
+        return None
+    number = float(match.group(1))
+    unit = (match.group(2) or "pt").lower()
+    return round(number * 0.75, 1) if unit == "px" else number
+
+
+def _apply_css(style: Style, css_text: str) -> None:
+    """Merge CSS declarations from a Cognos ``<CSS value=.../>`` string onto a Style in place."""
+    decl = _css_declarations(css_text)
+    if "font-family" in decl:
+        # Take the first family and strip quotes; drop any generic fallback list.
+        family = decl["font-family"].split(",")[0].strip().strip("'\"")
+        if family:
+            style.font_family = family
+    if "font-size" in decl:
+        size = _css_size_pt(decl["font-size"])
+        if size:
+            style.font_size_pt = size
+    if "font-weight" in decl:
+        weight = decl["font-weight"].strip().lower()
+        if weight in {"bold", "bolder"} or (weight.isdigit() and int(weight) >= 600):
+            style.bold = True
+    if decl.get("font-style", "").lower() == "italic":
+        style.italic = True
+    if "underline" in decl.get("text-decoration", "").lower():
+        style.underline = True
+    if "color" in decl:
+        style.color = decl["color"].strip()
+    if "background-color" in decl:
+        style.background_color = decl["background-color"].strip()
+    background = decl.get("background")
+    if background and style.background_color is None:
+        # A shorthand background may carry only a color token; keep it if it looks like one.
+        token = background.split()[0].strip() if background.split() else ""
+        if token.startswith("#") or token.isalpha():
+            style.background_color = token
+    if "text-align" in decl:
+        style.text_align = _CSS_ALIGN.get(decl["text-align"].strip().lower())
+    if "vertical-align" in decl:
+        style.vertical_align = _CSS_VALIGN.get(decl["vertical-align"].strip().lower())
+
+
+def _extract_style(style_element: etree._Element | None) -> Style | None:
+    """Build a Style from a Cognos ``<style>`` element (named ``refStyle`` classes plus inline CSS).
+
+    Named classes are applied first (as defaults) and inline CSS overrides them, matching how Cognos
+    layers a class reference under an explicit CSS override.
+    """
+    if style_element is None:
+        return None
+    style = Style()
+    for ref in style_element.iter("defaultStyle"):
+        defaults = _REFSTYLE_DEFAULTS.get((ref.get("refStyle") or "").strip())
+        if defaults:
+            for key, value in defaults.items():
+                setattr(style, key, value)
+    for css in style_element.iter("CSS"):
+        value = css.get("value")
+        if value:
+            _apply_css(style, value)
+    return None if style.is_empty() else style
+
+
+def _child_style(element: etree._Element) -> Style | None:
+    """Return the extracted Style from a direct ``<style>`` child of an element, if any."""
+    return _extract_style(element.find("style"))
 
 
 def _rs_data_type(data_item: etree._Element) -> DataType | None:
@@ -447,7 +548,8 @@ class CognosReportParser:
         """Capture layout static text (letterhead/signature) split into before/after the data list.
 
         Static text that appears before the first list becomes header text; text after it becomes
-        footer text. Text inside a list (for example a no-data message) is ignored.
+        footer text. Text inside a list (for example a no-data message) is ignored. Each block keeps
+        the font/size/color style Cognos set on its ``textItem``.
         """
         seen_list = False
         for element in page.iter():
@@ -462,10 +564,17 @@ class CognosReportParser:
                 continue
             if _has_ancestor(element, "list"):
                 continue
+            style = None
+            text_item = element.getparent()
+            while text_item is not None and text_item.tag != "textItem":
+                text_item = text_item.getparent()
+            if text_item is not None:
+                style = _child_style(text_item)
+            block = TextBlock(text=text, style=style)
             if seen_list:
-                report_page.footer_texts.append(text)
+                report_page.footer_blocks.append(block)
             else:
-                report_page.header_texts.append(text)
+                report_page.header_blocks.append(block)
 
     def _build_visual(
         self, obj: etree._Element, visual_type: VisualType, project: MigrationProject
@@ -495,18 +604,28 @@ class CognosReportParser:
         """Bind the visual to exactly the columns the Cognos layout shows, in their shown order.
 
         A Cognos list declares its columns (and order) via ``listColumn`` entries. When present we
-        honor that selection and order; otherwise we fall back to every column then measure.
+        honor that selection and order, and carry each column's title/body style through so the
+        generated report matches the source alignment, font, and weight; otherwise we fall back to
+        every column then measure.
         """
         column_names = {column.name for column in table.columns}
         measure_names = {measure.name for measure in table.measures}
         fields: list[VisualField] = []
         seen: set[str] = set()
-        for ref in self._layout_column_refs(obj):
+        for ref, header_style, cell_style in self._layout_columns(obj):
             if ref in seen or (ref not in column_names and ref not in measure_names):
                 continue
             seen.add(ref)
             role = "values" if ref in measure_names else "rows"
-            fields.append(VisualField(table=table.name, name=ref, role=role))
+            fields.append(
+                VisualField(
+                    table=table.name,
+                    name=ref,
+                    role=role,
+                    header_style=header_style,
+                    cell_style=cell_style,
+                )
+            )
         if fields:
             return fields
         for column in table.columns:
@@ -516,9 +635,9 @@ class CognosReportParser:
         return fields
 
     @staticmethod
-    def _layout_column_refs(obj: etree._Element) -> list[str]:
-        """Return the ordered data-item names referenced by a list's columns."""
-        refs: list[str] = []
+    def _layout_columns(obj: etree._Element) -> list[tuple[str, Style | None, Style | None]]:
+        """Return ordered ``(dataItem, titleStyle, bodyStyle)`` tuples for a list's columns."""
+        out: list[tuple[str, Style | None, Style | None]] = []
         for column in obj.iter("listColumn"):
             ref = None
             for tag in ("dataItemValue", "dataItemLabel"):
@@ -526,9 +645,14 @@ class CognosReportParser:
                 if cell is not None and cell.get("refDataItem"):
                     ref = _sanitize_identifier(cell.get("refDataItem"))
                     break
-            if ref:
-                refs.append(ref)
-        return refs
+            if not ref:
+                continue
+            title = column.find("listColumnTitle")
+            body = column.find("listColumnBody")
+            title_style = _child_style(title) if title is not None else None
+            body_style = _child_style(body) if body is not None else None
+            out.append((ref, title_style, body_style))
+        return out
 
 
 def _cardinality_is_many(cardinality: str) -> bool:

@@ -105,6 +105,48 @@ class ReviewFlag(BaseModel):
     source_ref: str | None = None
 
 
+class Style(BaseModel):
+    """Presentation style extracted from a Cognos report, in target-neutral terms.
+
+    Only properties that were explicitly set in the source are populated; ``None`` means "not
+    specified" so a generator can fall back to its own default without overwriting an intended
+    value. Colors are stored as the source token (a hex value like ``#005DAB`` or a CSS color name).
+    """
+
+    font_family: str | None = None
+    font_size_pt: float | None = None
+    bold: bool = False
+    italic: bool = False
+    underline: bool = False
+    color: str | None = None
+    background_color: str | None = None
+    text_align: str | None = None
+    vertical_align: str | None = None
+
+    def is_empty(self) -> bool:
+        """Return True when no style property is set."""
+        return not any(
+            (
+                self.font_family,
+                self.font_size_pt,
+                self.bold,
+                self.italic,
+                self.underline,
+                self.color,
+                self.background_color,
+                self.text_align,
+                self.vertical_align,
+            )
+        )
+
+
+class TextBlock(BaseModel):
+    """A block of static layout text (letterhead, signature) with its extracted style."""
+
+    text: str
+    style: Style | None = None
+
+
 class Column(BaseModel):
     """A column in a semantic-model table."""
 
@@ -188,6 +230,8 @@ class VisualField(BaseModel):
     table: str
     name: str
     role: str = "values"
+    header_style: Style | None = None
+    cell_style: Style | None = None
 
 
 class Visual(BaseModel):
@@ -208,8 +252,8 @@ class ReportPage(BaseModel):
     name: str
     display_name: str
     visuals: list[Visual] = Field(default_factory=list)
-    header_texts: list[str] = Field(default_factory=list)
-    footer_texts: list[str] = Field(default_factory=list)
+    header_blocks: list[TextBlock] = Field(default_factory=list)
+    footer_blocks: list[TextBlock] = Field(default_factory=list)
 
 
 class MigrationProject(BaseModel):

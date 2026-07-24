@@ -22,7 +22,9 @@ from cognos2powerbi.core.ir.models import (
     DataType,
     MigrationProject,
     ReportPage,
+    Style,
     Table,
+    TextBlock,
     Visual,
     VisualType,
 )
@@ -83,12 +85,21 @@ def _field_name(raw: str, used: set[str]) -> str:
 
 
 class RdlColumn:
-    """A resolved report column: display header, field identifier, and .NET type."""
+    """A resolved report column: display header, field identifier, .NET type, and source styles."""
 
-    def __init__(self, display: str, field: str, type_name: str) -> None:
+    def __init__(
+        self,
+        display: str,
+        field: str,
+        type_name: str,
+        header_style: Style | None = None,
+        cell_style: Style | None = None,
+    ) -> None:
         self.display = display
         self.field = field
         self.type_name = type_name
+        self.header_style = header_style
+        self.cell_style = cell_style
 
 
 class RdlGenerator:
@@ -146,7 +157,15 @@ class RdlGenerator:
                 type_name = _RDL_TYPE.get(
                     col.data_type if col else DataType.STRING, "System.String"
                 )
-                columns.append(RdlColumn(display, _field_name(field.name, used), type_name))
+                columns.append(
+                    RdlColumn(
+                        display,
+                        _field_name(field.name, used),
+                        type_name,
+                        header_style=field.header_style,
+                        cell_style=field.cell_style,
+                    )
+                )
         elif table is not None:
             for col in table.columns:
                 columns.append(
@@ -168,8 +187,8 @@ class RdlGenerator:
         dataset_name: str,
         table_name: str,
     ) -> str:
-        header_texts = list(page.header_texts) if page else []
-        footer_texts = list(page.footer_texts) if page else []
+        header_blocks = list(page.header_blocks) if page else []
+        footer_blocks = list(page.footer_blocks) if page else []
 
         parts: list[str] = []
         parts.append('<?xml version="1.0" encoding="utf-8"?>')
@@ -177,7 +196,7 @@ class RdlGenerator:
         parts.append("  <AutoRefresh>0</AutoRefresh>")
         parts.append(self._data_sources())
         parts.append(self._data_sets(project, columns, dataset_name, table_name))
-        parts.append(self._report_sections(header_texts, footer_texts, columns, dataset_name))
+        parts.append(self._report_sections(header_blocks, footer_blocks, columns, dataset_name))
         parts.append("  <ReportParametersLayout>")
         parts.append("    <GridLayoutDefinition>")
         parts.append("      <NumberOfColumns>4</NumberOfColumns>")
@@ -258,8 +277,8 @@ class RdlGenerator:
 
     def _report_sections(
         self,
-        header_texts: list[str],
-        footer_texts: list[str],
+        header_blocks: list[TextBlock],
+        footer_blocks: list[TextBlock],
         columns: list[RdlColumn],
         dataset_name: str,
     ) -> str:
@@ -267,9 +286,11 @@ class RdlGenerator:
         used_names: set[str] = set()
 
         top = 0.1
-        for index, text in enumerate(header_texts):
+        for index, block in enumerate(header_blocks):
             name = _unique(f"Header{index + 1}", used_names)
-            items.append(self._textbox(name, text, top, _LEFT_MARGIN, 6.5, _TEXT_HEIGHT))
+            items.append(
+                self._textbox(name, block.text, top, _LEFT_MARGIN, 6.5, _TEXT_HEIGHT, block.style)
+            )
             top += _TEXT_HEIGHT + 0.03
 
         tablix_top = top + 0.15
@@ -280,9 +301,11 @@ class RdlGenerator:
             top = tablix_top + tablix_height
 
         top += 0.35
-        for index, text in enumerate(footer_texts):
+        for index, block in enumerate(footer_blocks):
             name = _unique(f"Footer{index + 1}", used_names)
-            items.append(self._textbox(name, text, top, _LEFT_MARGIN, 6.5, _TEXT_HEIGHT))
+            items.append(
+                self._textbox(name, block.text, top, _LEFT_MARGIN, 6.5, _TEXT_HEIGHT, block.style)
+            )
             top += _TEXT_HEIGHT + 0.03
 
         body_height = max(top + 0.25, 4.0)
@@ -313,36 +336,30 @@ class RdlGenerator:
 
     @staticmethod
     def _textbox(
-        name: str, value: str, top: float, left: float, width: float, height: float
+        name: str,
+        value: str,
+        top: float,
+        left: float,
+        width: float,
+        height: float,
+        style: Style | None = None,
     ) -> str:
-        return (
-            f'          <Textbox Name="{_esc(name)}">\n'
-            "            <CanGrow>true</CanGrow>\n"
-            "            <KeepTogether>true</KeepTogether>\n"
-            "            <Paragraphs>\n"
-            "              <Paragraph>\n"
-            "                <TextRuns>\n"
-            "                  <TextRun>\n"
-            f"                    <Value>{_esc(value)}</Value>\n"
-            "                    <Style>\n"
-            f"                      <FontFamily>{_FONT}</FontFamily>\n"
-            "                    </Style>\n"
-            "                  </TextRun>\n"
-            "                </TextRuns>\n"
-            "                <Style />\n"
-            "              </Paragraph>\n"
-            "            </Paragraphs>\n"
-            f"            <rd:DefaultName>{_esc(name)}</rd:DefaultName>\n"
-            f"            <Top>{top:.2f}in</Top>\n"
-            f"            <Left>{left:.2f}in</Left>\n"
-            f"            <Height>{height:.2f}in</Height>\n"
-            f"            <Width>{width:.2f}in</Width>\n"
-            "            <Style>\n"
-            "              <Border>\n"
-            "                <Style>None</Style>\n"
-            "              </Border>\n"
-            "            </Style>\n"
-            "          </Textbox>"
+        """Build a free-standing letterhead textbox, honoring the font/size/color Cognos set."""
+        return _textbox_xml(
+            name=name,
+            value=value,
+            family=_family(style),
+            size_pt=style.font_size_pt if style else None,
+            bold=bool(style and style.bold),
+            italic=bool(style and style.italic),
+            color=style.color if style else None,
+            underline=bool(style and style.underline),
+            align=style.text_align if style else None,
+            top=top,
+            left=left,
+            width=width,
+            height=height,
+            indent=10,
         )
 
     def _tablix(
@@ -409,72 +426,54 @@ class RdlGenerator:
 
     @staticmethod
     def _header_cell(col: RdlColumn) -> str:
-        name = f"{col.field}Header"
+        """Header cell: keep the branded blue treatment as the default, overlay any source style."""
+        style = col.header_style
+        textbox = _textbox_xml(
+            name=f"{col.field}Header",
+            value=col.display,
+            family=_family(style),
+            size_pt=style.font_size_pt if style else None,
+            bold=True if style is None else (style.bold or True),
+            italic=bool(style and style.italic),
+            color=(style.color if style and style.color else "White"),
+            underline=bool(style and style.underline),
+            align=(style.text_align if style and style.text_align else "Center"),
+            background=(style.background_color if style and style.background_color else _HEADER_BG),
+            vertical_align="Middle",
+            border_style="Solid",
+            border_color="White",
+            indent=24,
+        )
         return (
             "                    <TablixCell>\n"
             "                      <CellContents>\n"
-            f'                        <Textbox Name="{_esc(name)}">\n'
-            "                          <CanGrow>true</CanGrow>\n"
-            "                          <KeepTogether>true</KeepTogether>\n"
-            "                          <Paragraphs>\n"
-            "                            <Paragraph>\n"
-            "                              <TextRuns>\n"
-            "                                <TextRun>\n"
-            f"                                  <Value>{_esc(col.display)}</Value>\n"
-            "                                  <Style>\n"
-            f"                                    <FontFamily>{_FONT}</FontFamily>\n"
-            "                                    <FontWeight>Bold</FontWeight>\n"
-            "                                    <Color>White</Color>\n"
-            "                                  </Style>\n"
-            "                                </TextRun>\n"
-            "                              </TextRuns>\n"
-            "                              <Style>\n"
-            "                                <TextAlign>Center</TextAlign>\n"
-            "                              </Style>\n"
-            "                            </Paragraph>\n"
-            "                          </Paragraphs>\n"
-            f"                          <rd:DefaultName>{_esc(name)}</rd:DefaultName>\n"
-            "                          <Style>\n"
-            f"                            <BackgroundColor>{_HEADER_BG}</BackgroundColor>\n"
-            "                            <VerticalAlign>Middle</VerticalAlign>\n"
-            "                            <Border>\n"
-            "                              <Color>White</Color>\n"
-            "                              <Style>Solid</Style>\n"
-            "                            </Border>\n"
-            "                          </Style>\n"
-            "                        </Textbox>\n"
+            f"{textbox}\n"
             "                      </CellContents>\n"
             "                    </TablixCell>"
         )
 
     @staticmethod
     def _data_cell(col: RdlColumn) -> str:
+        """Data cell: bind the field and carry the source font/alignment through."""
+        style = col.cell_style
+        textbox = _textbox_xml(
+            name=col.field,
+            value=f"=Fields!{col.field}.Value",
+            family=_family(style),
+            size_pt=style.font_size_pt if style else None,
+            bold=bool(style and style.bold),
+            italic=bool(style and style.italic),
+            color=style.color if style else None,
+            underline=bool(style and style.underline),
+            align=style.text_align if style else None,
+            background=style.background_color if style else None,
+            border_style="Solid",
+            indent=24,
+        )
         return (
             "                    <TablixCell>\n"
             "                      <CellContents>\n"
-            f'                        <Textbox Name="{_esc(col.field)}">\n'
-            "                          <CanGrow>true</CanGrow>\n"
-            "                          <KeepTogether>true</KeepTogether>\n"
-            "                          <Paragraphs>\n"
-            "                            <Paragraph>\n"
-            "                              <TextRuns>\n"
-            "                                <TextRun>\n"
-            f"                                  <Value>=Fields!{_esc(col.field)}.Value</Value>\n"
-            "                                  <Style>\n"
-            f"                                    <FontFamily>{_FONT}</FontFamily>\n"
-            "                                  </Style>\n"
-            "                                </TextRun>\n"
-            "                              </TextRuns>\n"
-            "                              <Style />\n"
-            "                            </Paragraph>\n"
-            "                          </Paragraphs>\n"
-            f"                          <rd:DefaultName>{_esc(col.field)}</rd:DefaultName>\n"
-            "                          <Style>\n"
-            "                            <Border>\n"
-            "                              <Style>Solid</Style>\n"
-            "                            </Border>\n"
-            "                          </Style>\n"
-            "                        </Textbox>\n"
+            f"{textbox}\n"
             "                      </CellContents>\n"
             "                    </TablixCell>"
         )
@@ -488,6 +487,107 @@ def _unique(base: str, used: set[str]) -> str:
         candidate = f"{base}{suffix}"
     used.add(candidate)
     return candidate
+
+
+def _fmt_pt(size_pt: float) -> str:
+    return f"{size_pt:g}pt"
+
+
+def _family(style: Style | None) -> str:
+    """Return the source font family, falling back to the default when none was specified."""
+    if style and style.font_family:
+        return style.font_family
+    return _FONT
+
+
+def _textbox_xml(
+    *,
+    name: str,
+    value: str,
+    family: str,
+    size_pt: float | None = None,
+    bold: bool = False,
+    italic: bool = False,
+    color: str | None = None,
+    underline: bool = False,
+    align: str | None = None,
+    background: str | None = None,
+    vertical_align: str | None = None,
+    border_style: str = "None",
+    border_color: str | None = None,
+    top: float | None = None,
+    left: float | None = None,
+    width: float | None = None,
+    height: float | None = None,
+    indent: int,
+) -> str:
+    """Build a Report Builder ``<Textbox>`` element with run, paragraph, and box-level styles.
+
+    A ``top``/``left``/``width``/``height`` set positions a free-standing (letterhead) textbox; when
+    omitted the textbox is a Tablix cell that inherits its cell geometry. Whitespace between RDL
+    elements is insignificant, so a single indent base keeps the builder readable.
+    """
+    p = " " * indent
+    run: list[str] = [f"{p}      <FontFamily>{_esc(family)}</FontFamily>"]
+    if size_pt:
+        run.append(f"{p}      <FontSize>{_fmt_pt(size_pt)}</FontSize>")
+    if bold:
+        run.append(f"{p}      <FontWeight>Bold</FontWeight>")
+    if italic:
+        run.append(f"{p}      <FontStyle>Italic</FontStyle>")
+    if color:
+        run.append(f"{p}      <Color>{_esc(color)}</Color>")
+    if underline:
+        run.append(f"{p}      <TextDecoration>Underline</TextDecoration>")
+    paragraph_style = (
+        f"{p}        <Style>\n{p}          <TextAlign>{align}</TextAlign>\n{p}        </Style>"
+        if align
+        else f"{p}        <Style />"
+    )
+    box: list[str] = []
+    if background:
+        box.append(f"{p}    <BackgroundColor>{_esc(background)}</BackgroundColor>")
+    if vertical_align:
+        box.append(f"{p}    <VerticalAlign>{vertical_align}</VerticalAlign>")
+    box.append(f"{p}    <Border>")
+    if border_color:
+        box.append(f"{p}      <Color>{_esc(border_color)}</Color>")
+    box.append(f"{p}      <Style>{border_style}</Style>")
+    box.append(f"{p}    </Border>")
+    position: list[str] = []
+    if top is not None:
+        position.append(f"{p}  <Top>{top:.2f}in</Top>")
+    if left is not None:
+        position.append(f"{p}  <Left>{left:.2f}in</Left>")
+    if height is not None:
+        position.append(f"{p}  <Height>{height:.2f}in</Height>")
+    if width is not None:
+        position.append(f"{p}  <Width>{width:.2f}in</Width>")
+    lines = [
+        f'{p}<Textbox Name="{_esc(name)}">',
+        f"{p}  <CanGrow>true</CanGrow>",
+        f"{p}  <KeepTogether>true</KeepTogether>",
+        f"{p}  <Paragraphs>",
+        f"{p}    <Paragraph>",
+        f"{p}      <TextRuns>",
+        f"{p}        <TextRun>",
+        f"{p}          <Value>{_esc(value)}</Value>",
+        f"{p}          <Style>",
+        *run,
+        f"{p}          </Style>",
+        f"{p}        </TextRun>",
+        f"{p}      </TextRuns>",
+        paragraph_style,
+        f"{p}    </Paragraph>",
+        f"{p}  </Paragraphs>",
+        f"{p}  <rd:DefaultName>{_esc(name)}</rd:DefaultName>",
+        *position,
+        f"{p}  <Style>",
+        *box,
+        f"{p}  </Style>",
+        f"{p}</Textbox>",
+    ]
+    return "\n".join(lines)
 
 
 def _column_widths(columns: list[RdlColumn]) -> list[float]:
