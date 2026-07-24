@@ -7,6 +7,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-07-24
+
+### Fixed
+
+- RDL Tablix header row is now taller than a data row (0.35in vs 0.25in) so two-word column titles
+  that wrap onto a second line (for example "Contract Purchaser ID" or "Underwriter Username") are
+  no longer clipped in the Report Builder design and print views.
+
 ## [0.6.0] - 2026-07-23
 
 ### Added

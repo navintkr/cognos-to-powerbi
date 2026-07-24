@@ -36,6 +36,9 @@ _FONT = "Arial"
 # Layout constants, in inches, matching the Report Builder sample.
 _COL_WIDTH = 1.2
 _ROW_HEIGHT = 0.25
+# The header row is taller than a data row so two-word column titles that wrap onto a second line
+# (for example "Contract Purchaser ID") are not clipped in the Report Builder design/print view.
+_HEADER_ROW_HEIGHT = 0.35
 _TEXT_HEIGHT = 0.25
 _LEFT_MARGIN = 0.25
 
@@ -260,7 +263,7 @@ class RdlGenerator:
             top += _TEXT_HEIGHT + 0.03
 
         tablix_top = top + 0.15
-        tablix_height = _ROW_HEIGHT * 2
+        tablix_height = _HEADER_ROW_HEIGHT + _ROW_HEIGHT
         if columns:
             items.append(self._tablix(columns, dataset_name, tablix_top, tablix_height))
             top = tablix_top + tablix_height
@@ -353,7 +356,7 @@ class RdlGenerator:
             "              </TablixColumns>\n"
             "              <TablixRows>\n"
             "                <TablixRow>\n"
-            f"                  <Height>{_ROW_HEIGHT:.2f}in</Height>\n"
+            f"                  <Height>{_HEADER_ROW_HEIGHT:.2f}in</Height>\n"
             "                  <TablixCells>\n"
             f"{header_cells}\n"
             "                  </TablixCells>\n"

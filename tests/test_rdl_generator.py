@@ -94,6 +94,18 @@ def test_rdl_includes_letterhead_text(tmp_path: Path) -> None:
     assert "GM FINANCIAL" in text
 
 
+def test_rdl_header_row_is_taller_than_data_row(tmp_path: Path) -> None:
+    # The Tablix header row must be taller so wrapped two-word titles are not clipped.
+    out = generate_rdl(_project(), tmp_path)
+    tree = etree.parse(str(out))
+    rows = tree.findall(f".//{_ns('Tablix')}//{_ns('TablixRow')}")
+    assert len(rows) == 2
+    header_height = rows[0].findtext(_ns("Height"))
+    data_height = rows[1].findtext(_ns("Height"))
+    assert header_height == "0.35in"
+    assert data_height == "0.25in"
+
+
 def test_pipeline_rdl_format_writes_rdl(tmp_path: Path) -> None:
     result = run_migration(EXAMPLE, tmp_path, ai="none", output_format="rdl")
     assert result.pbip_path.endswith(".rdl")
