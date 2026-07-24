@@ -155,6 +155,7 @@ class Column(BaseModel):
     source_column: str | None = None
     cognos_expression: str | None = None
     dax_expression: str | None = None
+    format_string: str | None = None
     is_calculated: bool = False
     needs_calculation: bool = False
     is_hidden: bool = False

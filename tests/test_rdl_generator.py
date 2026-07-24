@@ -170,3 +170,20 @@ def test_rdl_applies_extracted_styles(tmp_path: Path) -> None:
     assert "<FontFamily>Times New Roman</FontFamily>" in text
     assert "<FontSize>14pt</FontSize>" in text
     assert "<TextAlign>Right</TextAlign>" in text
+
+
+def test_rdl_applies_type_default_format_masks(tmp_path: Path) -> None:
+    # With no explicit Cognos format, dates get a short-date mask and decimals get grouping.
+    out = generate_rdl(_project(), tmp_path)
+    text = out.read_text(encoding="utf-8")
+    assert "<Format>d</Format>" in text  # Purchase Date (dateTime)
+    assert "<Format>#,##0.00</Format>" in text  # Amount (decimal)
+
+
+def test_rdl_uses_explicit_cognos_format(tmp_path: Path) -> None:
+    # An explicit Cognos data-item format string wins over the type-based default.
+    project = _project()
+    project.tables[0].columns[2].format_string = "C2"  # Amount
+    out = generate_rdl(project, tmp_path)
+    text = out.read_text(encoding="utf-8")
+    assert "<Format>C2</Format>" in text

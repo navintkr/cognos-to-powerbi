@@ -20,6 +20,7 @@ from xml.sax.saxutils import escape
 
 from cognos2powerbi.core.ir.models import (
     DataType,
+    Measure,
     MigrationProject,
     ReportPage,
     Style,
@@ -64,6 +65,19 @@ _RDL_TYPE = {
     DataType.DATE_TIME: "System.DateTime",
 }
 
+# Type-based default .NET format string used when the Cognos data item carries no explicit format.
+# Dates render as a short date and numeric values get thousands grouping; strings are left raw.
+_RDL_DEFAULT_FORMAT = {
+    DataType.DATE_TIME: "d",
+    DataType.DECIMAL: "#,##0.00",
+    DataType.DOUBLE: "#,##0.00",
+    DataType.INT64: "#,##0",
+}
+
+
+def _default_format(data_type: DataType) -> str | None:
+    return _RDL_DEFAULT_FORMAT.get(data_type)
+
 
 def _esc(text: str) -> str:
     """XML-escape text content."""
@@ -94,12 +108,14 @@ class RdlColumn:
         type_name: str,
         header_style: Style | None = None,
         cell_style: Style | None = None,
+        value_format: str | None = None,
     ) -> None:
         self.display = display
         self.field = field
         self.type_name = type_name
         self.header_style = header_style
         self.cell_style = cell_style
+        self.value_format = value_format
 
 
 class RdlGenerator:
@@ -153,9 +169,12 @@ class RdlGenerator:
         if visual is not None and visual.fields:
             for field in visual.fields:
                 col = table.column(field.name) if table else None
+                measure = _find_measure(table, field.name) if table and col is None else None
                 display = field.name
-                type_name = _RDL_TYPE.get(
-                    col.data_type if col else DataType.STRING, "System.String"
+                data_type = col.data_type if col else DataType.STRING
+                type_name = _RDL_TYPE.get(data_type, "System.String")
+                source_format = (
+                    col.format_string if col else (measure.format_string if measure else None)
                 )
                 columns.append(
                     RdlColumn(
@@ -164,6 +183,7 @@ class RdlGenerator:
                         type_name,
                         header_style=field.header_style,
                         cell_style=field.cell_style,
+                        value_format=source_format or _default_format(data_type),
                     )
                 )
         elif table is not None:
@@ -173,6 +193,7 @@ class RdlGenerator:
                         col.name,
                         _field_name(col.name, used),
                         _RDL_TYPE.get(col.data_type, "System.String"),
+                        value_format=col.format_string or _default_format(col.data_type),
                     )
                 )
         return columns
@@ -466,6 +487,7 @@ class RdlGenerator:
             color=style.color if style else None,
             underline=bool(style and style.underline),
             align=style.text_align if style else None,
+            value_format=col.value_format,
             background=style.background_color if style else None,
             border_style="Solid",
             indent=24,
@@ -511,6 +533,7 @@ def _textbox_xml(
     color: str | None = None,
     underline: bool = False,
     align: str | None = None,
+    value_format: str | None = None,
     background: str | None = None,
     vertical_align: str | None = None,
     border_style: str = "None",
@@ -539,6 +562,8 @@ def _textbox_xml(
         run.append(f"{p}      <Color>{_esc(color)}</Color>")
     if underline:
         run.append(f"{p}      <TextDecoration>Underline</TextDecoration>")
+    if value_format:
+        run.append(f"{p}      <Format>{_esc(value_format)}</Format>")
     paragraph_style = (
         f"{p}        <Style>\n{p}          <TextAlign>{align}</TextAlign>\n{p}        </Style>"
         if align
@@ -617,6 +642,14 @@ def _safe_name(table: Table | None) -> str:
     if table is None:
         return ""
     return re.sub(r"[^0-9A-Za-z_]", "", table.name) or "Table"
+
+
+def _find_measure(table: Table, name: str) -> Measure | None:
+    """Return the measure with the given name from a table, if present."""
+    for measure in table.measures:
+        if measure.name == name:
+            return measure
+    return None
 
 
 def _safe_file(name: str) -> str:

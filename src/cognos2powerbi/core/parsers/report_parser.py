@@ -216,6 +216,65 @@ def _child_style(element: etree._Element) -> Style | None:
     return _extract_style(element.find("style"))
 
 
+# Cognos date/time styles -> .NET format strings used by Report Builder.
+_COGNOS_DATE_STYLE = {
+    "short": "d",
+    "shortdate": "d",
+    "medium": "d",
+    "long": "D",
+    "full": "D",
+}
+_COGNOS_TIME_STYLE = {"short": "t", "medium": "t", "long": "T", "full": "T"}
+
+
+def _number_pattern(child: etree._Element, default_digits: int) -> tuple[str, str]:
+    """Return ``(integer, decimal)`` pattern parts for a Cognos numeric format element."""
+    digits_attr = child.get("decimalDigits")
+    try:
+        digits = int(digits_attr) if digits_attr is not None else default_digits
+    except ValueError:
+        digits = default_digits
+    grouping = (child.get("useGrouping") or "true").strip().lower() != "false"
+    integer = "#,##0" if grouping else "0"
+    decimal = ("." + "0" * digits) if digits > 0 else ""
+    return integer, decimal
+
+
+def _parse_data_format(data_item: etree._Element) -> str | None:
+    """Translate a Cognos ``<dataFormat>`` into a .NET format string, or None when absent.
+
+    Handles the common Cognos format groups: date, time, dateTime, number, currency, and percent.
+    Only the first format element in the group is used (Cognos applies one per data item).
+    """
+    data_format = data_item.find("dataFormat")
+    if data_format is None:
+        return None
+    group = data_format.find("formatGroup")
+    if group is None:
+        return None
+    child = next(iter(group), None)
+    if child is None:
+        return None
+    tag = child.tag if isinstance(child.tag, str) else ""
+    if tag == "dateFormat":
+        return _COGNOS_DATE_STYLE.get((child.get("dateStyle") or "short").strip().lower(), "d")
+    if tag == "timeFormat":
+        return _COGNOS_TIME_STYLE.get((child.get("timeStyle") or "short").strip().lower(), "t")
+    if tag == "dateTimeFormat":
+        return "g"
+    if tag == "currencyFormat":
+        integer, decimal = _number_pattern(child, 2)
+        symbol = child.get("currencySymbol") or "$"
+        return f"{symbol}{integer}{decimal}"
+    if tag == "percentFormat":
+        integer, decimal = _number_pattern(child, 2)
+        return f"{integer}{decimal}%"
+    if tag == "numberFormat":
+        integer, decimal = _number_pattern(child, 0)
+        return f"{integer}{decimal}"
+    return None
+
+
 def _rs_data_type(data_item: etree._Element) -> DataType | None:
     """Return the TMDL type implied by an ``RS_dataType`` XML attribute, if present."""
     for attr in data_item.iter("XMLAttribute"):
@@ -449,9 +508,10 @@ class CognosReportParser:
             expression_el.text.strip() if expression_el is not None and expression_el.text else None
         )
         data_type = _infer_data_type(data_item, cognos_expression)
+        data_format = _parse_data_format(data_item)
 
         if aggregate not in {"none", ""}:
-            self._add_measure(item_name, cognos_expression, aggregate, table, project)
+            self._add_measure(item_name, cognos_expression, aggregate, table, project, data_format)
             return
 
         # A plain reference (or cast of a reference) becomes a physical column.
@@ -462,6 +522,7 @@ class CognosReportParser:
                     data_type=data_type,
                     source_column=_reference_source(cognos_expression, item_name),
                     cognos_expression=cognos_expression,
+                    format_string=data_format,
                 )
             )
             return
@@ -478,6 +539,7 @@ class CognosReportParser:
                     cognos_expression=cognos_expression,
                     dax_expression=translation.dax,
                     is_calculated=True,
+                    format_string=data_format,
                 )
             )
             return
@@ -496,6 +558,7 @@ class CognosReportParser:
                 source_column=item_name,
                 cognos_expression=cognos_expression,
                 needs_calculation=True,
+                format_string=data_format,
             )
         )
 
@@ -506,6 +569,7 @@ class CognosReportParser:
         aggregate: str,
         table: Table,
         project: MigrationProject,
+        format_string: str | None = None,
     ) -> None:
         translation = translate_measure_expression(
             cognos_expression or f"[{item_name}]",
@@ -526,6 +590,7 @@ class CognosReportParser:
                 name=item_name,
                 dax_expression=translation.dax,
                 cognos_expression=cognos_expression,
+                format_string=format_string,
                 needs_review=needs_review,
             )
         )

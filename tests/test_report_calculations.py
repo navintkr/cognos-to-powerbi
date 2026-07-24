@@ -42,6 +42,45 @@ def test_unmappable_calculation_stays_physical_and_flagged() -> None:
     assert "calculation-needs-review" in codes
 
 
+_FORMAT_REPORT = """<?xml version="1.0" encoding="UTF-8"?>
+<report xmlns="http://developer.cognos.com/schemas/report/16.2/">
+  <queries>
+    <query name="Sales">
+      <selection>
+        <dataItem name="Amount">
+          <expression>[DB].[Sales].[Amount]</expression>
+          <dataFormat>
+            <formatGroup>
+              <currencyFormat currencySymbol="$" decimalDigits="2" useGrouping="true"/>
+            </formatGroup>
+          </dataFormat>
+        </dataItem>
+        <dataItem name="Order Date">
+          <expression>[DB].[Sales].[Order Date]</expression>
+          <dataFormat>
+            <formatGroup>
+              <dateFormat dateStyle="short"/>
+            </formatGroup>
+          </dataFormat>
+        </dataItem>
+      </selection>
+    </query>
+  </queries>
+  <layouts><layout><reportPages><page name="P"><pageBody><contents/></pageBody></page>
+  </reportPages></layout></layouts>
+</report>
+"""
+
+
+def test_extracts_cognos_data_format(tmp_path: Path) -> None:
+    source = tmp_path / "format_report.xml"
+    source.write_text(_FORMAT_REPORT, encoding="utf-8")
+    project = parse_report(source)
+    sales = _table(project, "Sales")
+    assert sales.column("Amount").format_string == "$#,##0.00"
+    assert sales.column("Order Date").format_string == "d"
+
+
 def test_aggregated_item_becomes_measure() -> None:
     project = parse_report(EXAMPLE)
     orders = _table(project, "Orders")

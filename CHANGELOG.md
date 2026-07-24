@@ -7,6 +7,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-24
+
+### Added
+
+- Format masks for RDL data cells. The report parser now reads Cognos ``<dataFormat>`` specs
+  (date, time, dateTime, number, currency, and percent format groups) and translates them to .NET
+  format strings, captured on ``Column.format_string`` and ``Measure.format_string``. The RDL
+  generator writes them as ``<Format>`` on each data cell. When a data item has no explicit format,
+  a type-based default is applied (dates render as a short date, decimals and doubles get thousands
+  grouping with two decimals, integers get grouping), so numbers and dates are formatted instead of
+  shown raw. Explicit Cognos formats always win over the default.
+
 ## [0.7.0] - 2026-07-24
 
 ### Added
