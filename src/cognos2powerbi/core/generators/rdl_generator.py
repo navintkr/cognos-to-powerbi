@@ -34,13 +34,23 @@ _HEADER_BG = "#005DAB"
 _FONT = "Arial"
 
 # Layout constants, in inches, matching the Report Builder sample.
-_COL_WIDTH = 1.2
 _ROW_HEIGHT = 0.25
 # The header row is taller than a data row so two-word column titles that wrap onto a second line
 # (for example "Contract Purchaser ID") are not clipped in the Report Builder design/print view.
 _HEADER_ROW_HEIGHT = 0.35
 _TEXT_HEIGHT = 0.25
 _LEFT_MARGIN = 0.25
+
+# Column auto-sizing bounds (inches). Each column is widened to fit the longer of its header word
+# and its field-name placeholder so data cells are not clipped horizontally in design view; the
+# whole Tablix is then scaled to stay within the printable page width.
+_MIN_COL_WIDTH = 0.9
+_MAX_COL_WIDTH = 2.2
+# Width budget for the Tablix: body width (7.5in) minus the Tablix left offset, with a small margin
+# so rounded per-column widths never push the right edge past the printable page.
+_PRINTABLE_WIDTH = 7.2
+_CHAR_WIDTH = 0.085
+_CELL_PADDING = 0.2
 
 # IR data type -> RDL rd:TypeName (the .NET type Report Builder records for each field).
 _RDL_TYPE = {
@@ -265,7 +275,8 @@ class RdlGenerator:
         tablix_top = top + 0.15
         tablix_height = _HEADER_ROW_HEIGHT + _ROW_HEIGHT
         if columns:
-            items.append(self._tablix(columns, dataset_name, tablix_top, tablix_height))
+            widths = _column_widths(columns)
+            items.append(self._tablix(columns, dataset_name, tablix_top, tablix_height, widths))
             top = tablix_top + tablix_height
 
         top += 0.35
@@ -335,19 +346,23 @@ class RdlGenerator:
         )
 
     def _tablix(
-        self, columns: list[RdlColumn], dataset_name: str, top: float, height: float
+        self,
+        columns: list[RdlColumn],
+        dataset_name: str,
+        top: float,
+        height: float,
+        widths: list[float],
     ) -> str:
-        n = len(columns)
         tablix_columns = "\n".join(
-            f"              <TablixColumn>\n"
-            f"                <Width>{_COL_WIDTH:.1f}in</Width>\n"
-            f"              </TablixColumn>"
-            for _ in columns
+            "              <TablixColumn>\n"
+            f"                <Width>{w:.2f}in</Width>\n"
+            "              </TablixColumn>"
+            for w in widths
         )
         header_cells = "\n".join(self._header_cell(col) for col in columns)
         data_cells = "\n".join(self._data_cell(col) for col in columns)
         column_members = "\n".join("                <TablixMember />" for _ in columns)
-        width = n * _COL_WIDTH
+        width = sum(widths)
         return (
             '          <Tablix Name="ReportTablix">\n'
             "            <TablixBody>\n"
@@ -388,7 +403,7 @@ class RdlGenerator:
             f"            <Top>{top:.2f}in</Top>\n"
             f"            <Left>{_LEFT_MARGIN:.2f}in</Left>\n"
             f"            <Height>{height:.2f}in</Height>\n"
-            f"            <Width>{width:.1f}in</Width>\n"
+            f"            <Width>{width:.2f}in</Width>\n"
             "          </Tablix>"
         )
 
@@ -473,6 +488,29 @@ def _unique(base: str, used: set[str]) -> str:
         candidate = f"{base}{suffix}"
     used.add(candidate)
     return candidate
+
+
+def _column_widths(columns: list[RdlColumn]) -> list[float]:
+    """Size each column to its content so data cells are not clipped, then fit the printable page.
+
+    The width is driven by the longer of the header's longest single word (headers wrap on spaces)
+    and the field-name placeholder shown in the design view. Each width is clamped to a sensible
+    range; if the row is wider than the printable page it is scaled down proportionally so the whole
+    Tablix still fits.
+    """
+    raw: list[float] = []
+    for col in columns:
+        longest_word = max((len(word) for word in col.display.split()), default=len(col.display))
+        # The design-view placeholder renders as "[FieldName]" (field name plus two brackets).
+        placeholder_len = len(col.field) + 2
+        chars = max(longest_word, placeholder_len)
+        width = chars * _CHAR_WIDTH + _CELL_PADDING
+        raw.append(max(_MIN_COL_WIDTH, min(_MAX_COL_WIDTH, width)))
+    total = sum(raw)
+    if total > _PRINTABLE_WIDTH:
+        scale = _PRINTABLE_WIDTH / total
+        raw = [width * scale for width in raw]
+    return raw
 
 
 def _safe_name(table: Table | None) -> str:

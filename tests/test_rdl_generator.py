@@ -106,6 +106,48 @@ def test_rdl_header_row_is_taller_than_data_row(tmp_path: Path) -> None:
     assert data_height == "0.25in"
 
 
+def test_rdl_columns_are_auto_sized_to_content(tmp_path: Path) -> None:
+    # A long-named column must be wider than a short-named one, and all columns must fit the page.
+    project = MigrationProject(
+        name="Widths",
+        tables=[
+            Table(
+                name="T",
+                columns=[
+                    Column(name="ID", data_type=DataType.STRING),
+                    Column(name="Contract Purchaser Identifier", data_type=DataType.STRING),
+                ],
+            )
+        ],
+        pages=[
+            ReportPage(
+                name="P",
+                display_name="P",
+                visuals=[
+                    Visual(
+                        visual_type=VisualType.TABLE,
+                        fields=[
+                            VisualField(table="T", name="ID", role="Values"),
+                            VisualField(
+                                table="T", name="Contract Purchaser Identifier", role="Values"
+                            ),
+                        ],
+                    )
+                ],
+            )
+        ],
+    )
+    out = generate_rdl(project, tmp_path)
+    tree = etree.parse(str(out))
+    widths = [
+        float(w.text.replace("in", ""))
+        for w in tree.findall(f".//{_ns('TablixColumns')}/{_ns('TablixColumn')}/{_ns('Width')}")
+    ]
+    assert len(widths) == 2
+    assert widths[1] > widths[0]
+    assert sum(widths) <= 7.5 + 0.01
+
+
 def test_pipeline_rdl_format_writes_rdl(tmp_path: Path) -> None:
     result = run_migration(EXAMPLE, tmp_path, ai="none", output_format="rdl")
     assert result.pbip_path.endswith(".rdl")

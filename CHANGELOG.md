@@ -7,6 +7,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-07-24
+
+### Fixed
+
+- RDL Tablix columns are now auto-sized to their content instead of a fixed 1.2in width, so longer
+  fields (for example "Contract Purchaser ID" and "Underwriter Username") are no longer clipped
+  horizontally in the data cells. Each column is sized to the longer of its header word and its
+  field-name placeholder, then the whole Tablix is scaled to fit the printable page width.
+
 ## [0.6.1] - 2026-07-24
 
 ### Fixed
