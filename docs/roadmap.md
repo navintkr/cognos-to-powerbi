@@ -11,6 +11,11 @@ contributions and adoption.
   columns and flagged.
 - Query joins to Power BI relationships; honest flags for derived queries, detail filters, and
   package sources.
+- Query graph extraction: queries classified by role (output, join, union, reference, detail) with
+  join/union/reference edges, emitted as `MIGRATION_METADATA.json`.
+- Structured detail-filter extraction (raw expression, `use` semantics, referenced parameters).
+- Structured Cognos prompt/parameter extraction (control type, source/values query, defaults),
+  emitted to RDL `ReportParameters`.
 - Framework Manager model parser to TMDL with relationship detection.
 - Data module parser to TMDL (query subjects, facts, identifiers, relationships).
 - Dashboard and exploration parser to PBIR report pages.
@@ -31,7 +36,9 @@ contributions and adoption.
 
 - Crosstab to matrix parity.
 - Chart property mapping (axes, legends, series).
-- Filters, prompts, and conditional formatting.
+- Conditional formatting.
+- Apply extracted filters and prompts to the generated model (Power Query steps, report/page
+  filters, and Power BI parameters/slicers) - the structured metadata now feeds this.
 
 ## Milestone 5 - Team features
 

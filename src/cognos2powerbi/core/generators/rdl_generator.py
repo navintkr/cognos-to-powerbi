@@ -18,10 +18,12 @@ import re
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from cognos2powerbi.core.generators.metadata import write_migration_metadata
 from cognos2powerbi.core.ir.models import (
     DataType,
     Measure,
     MigrationProject,
+    Prompt,
     ReportPage,
     Style,
     Table,
@@ -63,6 +65,16 @@ _RDL_TYPE = {
     DataType.DECIMAL: "System.Decimal",
     DataType.BOOLEAN: "System.Boolean",
     DataType.DATE_TIME: "System.DateTime",
+}
+
+# IR data type -> RDL ReportParameter DataType (the five RDL parameter primitive types).
+_RDL_PARAM_TYPE = {
+    DataType.STRING: "String",
+    DataType.INT64: "Integer",
+    DataType.DOUBLE: "Float",
+    DataType.DECIMAL: "Float",
+    DataType.BOOLEAN: "Boolean",
+    DataType.DATE_TIME: "DateTime",
 }
 
 # Type-based default .NET format string used when the Cognos data item carries no explicit format.
@@ -133,6 +145,7 @@ class RdlGenerator:
         xml = self._render(project, page, columns, dataset_name, table_name=_safe_name(table))
         out_path = root / f"{_safe_file(project.name)}.rdl"
         out_path.write_text(xml, encoding="utf-8")
+        write_migration_metadata(project, root)
         return out_path
 
     # ------------------------------------------------------------------ selection
@@ -218,16 +231,90 @@ class RdlGenerator:
         parts.append(self._data_sources())
         parts.append(self._data_sets(project, columns, dataset_name, table_name))
         parts.append(self._report_sections(header_blocks, footer_blocks, columns, dataset_name))
-        parts.append("  <ReportParametersLayout>")
-        parts.append("    <GridLayoutDefinition>")
-        parts.append("      <NumberOfColumns>4</NumberOfColumns>")
-        parts.append("      <NumberOfRows>2</NumberOfRows>")
-        parts.append("    </GridLayoutDefinition>")
-        parts.append("  </ReportParametersLayout>")
+        parts.append(self._report_parameters(project.prompts))
+        parts.append(self._report_parameters_layout(project.prompts))
         parts.append("  <rd:ReportUnitType>Inch</rd:ReportUnitType>")
         parts.append("  <rd:ReportID>00000000-0000-0000-0000-000000000000</rd:ReportID>")
         parts.append("</Report>")
-        return "\n".join(parts) + "\n"
+        return "\n".join(part for part in parts if part) + "\n"
+
+    @staticmethod
+    def _report_parameters(prompts: list[Prompt]) -> str:
+        """Render Cognos prompts as RDL ``ReportParameters``.
+
+        Each Cognos prompt becomes a ``ReportParameter`` with the mapped data type, prompt caption,
+        nullability (from the prompt's ``required`` flag), multi-value flag, and any default values.
+        Selectable-value queries are preserved in the migration metadata rather than emitted as a
+        ``ValidValues`` dataset reference, so the report stays loadable without a matching dataset.
+        """
+        if not prompts:
+            return ""
+        lines = ["  <ReportParameters>"]
+        for prompt in prompts:
+            lines.extend(RdlGenerator._report_parameter(prompt))
+        lines.append("  </ReportParameters>")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _report_parameter(prompt: Prompt) -> list[str]:
+        data_type = _RDL_PARAM_TYPE.get(prompt.data_type, "String")
+        nullable = "false" if prompt.required else "true"
+        caption = prompt.caption or prompt.parameter_name
+        lines = [
+            f'    <ReportParameter Name="{_esc(prompt.parameter_name)}">',
+            f"      <DataType>{data_type}</DataType>",
+            f"      <Nullable>{nullable}</Nullable>",
+        ]
+        if prompt.default_values:
+            lines.append("      <DefaultValue>")
+            lines.append("        <Values>")
+            for value in prompt.default_values:
+                lines.append(f"          <Value>{_esc(value)}</Value>")
+            lines.append("        </Values>")
+            lines.append("      </DefaultValue>")
+        if data_type == "String":
+            lines.append(f"      <AllowBlank>{nullable}</AllowBlank>")
+        lines.append(f"      <Prompt>{_esc(caption)}</Prompt>")
+        if prompt.multi_select:
+            lines.append("      <MultiValue>true</MultiValue>")
+        lines.append("    </ReportParameter>")
+        return lines
+
+    @staticmethod
+    def _report_parameters_layout(prompts: list[Prompt]) -> str:
+        """Render the parameter grid layout, sized to the extracted prompts.
+
+        With no prompts the historical 4x2 grid is kept. With prompts the grid uses up to four
+        columns and places one parameter per cell so Report Builder shows every migrated prompt.
+        """
+        if not prompts:
+            return (
+                "  <ReportParametersLayout>\n"
+                "    <GridLayoutDefinition>\n"
+                "      <NumberOfColumns>4</NumberOfColumns>\n"
+                "      <NumberOfRows>2</NumberOfRows>\n"
+                "    </GridLayoutDefinition>\n"
+                "  </ReportParametersLayout>"
+            )
+        columns = min(4, len(prompts))
+        rows = (len(prompts) + columns - 1) // columns
+        lines = [
+            "  <ReportParametersLayout>",
+            "    <GridLayoutDefinition>",
+            f"      <NumberOfColumns>{columns}</NumberOfColumns>",
+            f"      <NumberOfRows>{rows}</NumberOfRows>",
+            "      <CellDefinitions>",
+        ]
+        for index, prompt in enumerate(prompts):
+            lines.append("        <CellDefinition>")
+            lines.append(f"          <ColumnIndex>{index % columns}</ColumnIndex>")
+            lines.append(f"          <RowIndex>{index // columns}</RowIndex>")
+            lines.append(f"          <ParameterName>{_esc(prompt.parameter_name)}</ParameterName>")
+            lines.append("        </CellDefinition>")
+        lines.append("      </CellDefinitions>")
+        lines.append("    </GridLayoutDefinition>")
+        lines.append("  </ReportParametersLayout>")
+        return "\n".join(lines)
 
     @staticmethod
     def _data_sources() -> str:
