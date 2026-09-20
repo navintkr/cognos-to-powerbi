@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-20
+
 ### Added
 
 - Query graph, filter, and prompt extraction for report specifications. The report parser now

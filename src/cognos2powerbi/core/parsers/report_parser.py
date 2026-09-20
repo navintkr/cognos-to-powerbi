@@ -462,9 +462,7 @@ class CognosReportParser:
                 ref = _sanitize_identifier(source.find("queryRef").get("refQuery") or "")
                 if ref:
                     graph.edges.append(
-                        QueryEdge(
-                            from_query=query_name, to_query=ref, kind=QueryEdgeKind.REFERENCE
-                        )
+                        QueryEdge(from_query=query_name, to_query=ref, kind=QueryEdgeKind.REFERENCE)
                     )
         if role == QueryRole.UNKNOWN:
             role = QueryRole.OUTPUT if is_output else QueryRole.DETAIL
@@ -479,9 +477,7 @@ class CognosReportParser:
                 return element
         return None
 
-    def _add_join_edges(
-        self, join_op: etree._Element, query_name: str, graph: QueryGraph
-    ) -> None:
+    def _add_join_edges(self, join_op: etree._Element, query_name: str, graph: QueryGraph) -> None:
         """Record a graph edge from the join query to each query it joins, plus the condition."""
         operands: list[str] = []
         for operand in join_op.iter("joinOperand"):
@@ -518,9 +514,7 @@ class CognosReportParser:
                 if operand not in seen:
                     seen.add(operand)
                     graph.edges.append(
-                        QueryEdge(
-                            from_query=query_name, to_query=operand, kind=QueryEdgeKind.UNION
-                        )
+                        QueryEdge(from_query=query_name, to_query=operand, kind=QueryEdgeKind.UNION)
                     )
 
     def _parse_query_source(
@@ -787,9 +781,7 @@ class CognosReportParser:
                 if default and default not in default_values:
                     default_values.append(default)
 
-        source_query = next(
-            (f.query for f in project.filters if param_name in f.parameters), None
-        )
+        source_query = next((f.query for f in project.filters if param_name in f.parameters), None)
         return Prompt(
             parameter_name=param_name,
             control_type=control_type,

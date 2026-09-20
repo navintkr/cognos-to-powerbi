@@ -32,10 +32,7 @@ def build_metadata(project: MigrationProject) -> dict:
 def has_metadata(project: MigrationProject) -> bool:
     """Return True when the project carries any query-graph, filter, or prompt metadata."""
     return bool(
-        project.query_graph.nodes
-        or project.query_graph.edges
-        or project.filters
-        or project.prompts
+        project.query_graph.nodes or project.query_graph.edges or project.filters or project.prompts
     )
 
 

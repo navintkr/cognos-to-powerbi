@@ -154,9 +154,7 @@ def test_rdl_emits_report_parameters(tmp_path: Path) -> None:
     names = {p.get("Name") for p in params.findall(_ns("ReportParameter"))}
     assert names == {"p_From_Date", "p_To_Date", "p_Region"}
 
-    region = next(
-        p for p in params.findall(_ns("ReportParameter")) if p.get("Name") == "p_Region"
-    )
+    region = next(p for p in params.findall(_ns("ReportParameter")) if p.get("Name") == "p_Region")
     assert region.find(_ns("DataType")).text == "String"
     assert region.find(_ns("MultiValue")).text == "true"
     assert region.find(_ns("Nullable")).text == "true"
