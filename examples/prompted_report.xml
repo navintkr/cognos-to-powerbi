@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Cognos report specification exercising the query-graph, filter, and prompt enhancements.
+
+  It contains:
+    - Detail queries (OrdersA, OrdersB) combined by a union query (AllOrders).
+    - A join query (OrderDetail) relating AllOrders to a Customer dimension.
+    - An output query (SalesOutput) referenced by the report list.
+    - Detail filters with mandatory, optional (prompted), and prohibited use semantics.
+    - Prompt pages defining a date-range prompt and a multi-select value prompt.
+-->
+<report xmlns="http://developer.cognos.com/schemas/report/16.2/" expressionLocale="en-us">
+  <queries>
+    <query name="OrdersA">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="OrderId" aggregate="none" datatype="integer">
+          <expression>[Sales].[OrdersA].[OrderId]</expression>
+        </dataItem>
+        <dataItem name="CustomerKey" aggregate="none" datatype="integer">
+          <expression>[Sales].[OrdersA].[CustomerKey]</expression>
+        </dataItem>
+        <dataItem name="OrderDate" aggregate="none" datatype="date">
+          <expression>[Sales].[OrdersA].[OrderDate]</expression>
+        </dataItem>
+        <dataItem name="Amount" aggregate="none" datatype="decimal">
+          <expression>[Sales].[OrdersA].[Amount]</expression>
+        </dataItem>
+      </selection>
+    </query>
+    <query name="OrdersB">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="OrderId" aggregate="none" datatype="integer">
+          <expression>[Sales].[OrdersB].[OrderId]</expression>
+        </dataItem>
+        <dataItem name="CustomerKey" aggregate="none" datatype="integer">
+          <expression>[Sales].[OrdersB].[CustomerKey]</expression>
+        </dataItem>
+        <dataItem name="OrderDate" aggregate="none" datatype="date">
+          <expression>[Sales].[OrdersB].[OrderDate]</expression>
+        </dataItem>
+        <dataItem name="Amount" aggregate="none" datatype="decimal">
+          <expression>[Sales].[OrdersB].[Amount]</expression>
+        </dataItem>
+      </selection>
+    </query>
+    <query name="AllOrders">
+      <source>
+        <queryOperation type="union">
+          <queryOperand>
+            <queryRef refQuery="OrdersA"/>
+          </queryOperand>
+          <queryOperand>
+            <queryRef refQuery="OrdersB"/>
+          </queryOperand>
+        </queryOperation>
+      </source>
+      <selection>
+        <dataItem name="OrderId" aggregate="none" datatype="integer">
+          <expression>[OrderId]</expression>
+        </dataItem>
+        <dataItem name="CustomerKey" aggregate="none" datatype="integer">
+          <expression>[CustomerKey]</expression>
+        </dataItem>
+        <dataItem name="OrderDate" aggregate="none" datatype="date">
+          <expression>[OrderDate]</expression>
+        </dataItem>
+        <dataItem name="Amount" aggregate="none" datatype="decimal">
+          <expression>[Amount]</expression>
+        </dataItem>
+      </selection>
+    </query>
+    <query name="Customer">
+      <source>
+        <model/>
+      </source>
+      <selection>
+        <dataItem name="CustomerKey" aggregate="none" datatype="integer">
+          <expression>[Sales].[Customer].[CustomerKey]</expression>
+        </dataItem>
+        <dataItem name="CustomerName" aggregate="none" datatype="string">
+          <expression>[Sales].[Customer].[CustomerName]</expression>
+        </dataItem>
+        <dataItem name="Region" aggregate="none" datatype="string">
+          <expression>[Sales].[Customer].[Region]</expression>
+        </dataItem>
+      </selection>
+    </query>
+    <query name="SalesOutput">
+      <source>
+        <joinOperation>
+          <joinOperand cardinality="1:n">
+            <queryRef refQuery="AllOrders"/>
+          </joinOperand>
+          <joinOperand cardinality="1:1">
+            <queryRef refQuery="Customer"/>
+          </joinOperand>
+          <joinFilter>
+            <filterExpression>[AllOrders].[CustomerKey] = [Customer].[CustomerKey]</filterExpression>
+          </joinFilter>
+        </joinOperation>
+      </source>
+      <selection>
+        <dataItem name="OrderId" aggregate="none" datatype="integer">
+          <expression>[AllOrders].[OrderId]</expression>
+        </dataItem>
+        <dataItem name="CustomerName" aggregate="none" datatype="string">
+          <expression>[Customer].[CustomerName]</expression>
+        </dataItem>
+        <dataItem name="Region" aggregate="none" datatype="string">
+          <expression>[Customer].[Region]</expression>
+        </dataItem>
+        <dataItem name="OrderDate" aggregate="none" datatype="date">
+          <expression>[AllOrders].[OrderDate]</expression>
+        </dataItem>
+        <dataItem name="Total Amount" aggregate="total" datatype="decimal">
+          <expression>[AllOrders].[Amount]</expression>
+        </dataItem>
+      </selection>
+      <detailFilters>
+        <detailFilter>
+          <filterExpression>[AllOrders].[Amount] &gt; 0</filterExpression>
+        </detailFilter>
+        <detailFilter use="optional">
+          <filterExpression>[AllOrders].[OrderDate] between ?p_From_Date? and ?p_To_Date?</filterExpression>
+        </detailFilter>
+        <detailFilter use="optional">
+          <filterExpression>[Customer].[Region] in (?p_Region?)</filterExpression>
+        </detailFilter>
+        <detailFilter use="prohibited">
+          <filterExpression>[Customer].[Region] = 'Internal'</filterExpression>
+        </detailFilter>
+      </detailFilters>
+    </query>
+  </queries>
+  <layouts>
+    <layout>
+      <reportPages>
+        <page name="Sales Detail">
+          <pageBody>
+            <contents>
+              <list refQuery="SalesOutput" name="SalesList"/>
+            </contents>
+          </pageBody>
+        </page>
+      </reportPages>
+      <promptPages>
+        <page name="Prompt Page">
+          <pageBody>
+            <contents>
+              <selectDate parameter="p_From_Date" required="true" range="true" caption="From Date"/>
+              <selectDate parameter="p_To_Date" required="true" range="true" caption="To Date"/>
+              <selectValue parameter="p_Region" required="false" multiSelect="true" caption="Region">
+                <selectValueUI>
+                  <queryRef refQuery="Customer"/>
+                  <useItem refDataItem="Region"/>
+                  <displayItem refDataItem="Region"/>
+                </selectValueUI>
+                <selectOptions>
+                  <defaultValue useValue="East"/>
+                </selectOptions>
+              </selectValue>
+            </contents>
+          </pageBody>
+        </page>
+      </promptPages>
+    </layout>
+  </layouts>
+</report>

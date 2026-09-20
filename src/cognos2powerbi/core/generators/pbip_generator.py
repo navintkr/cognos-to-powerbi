@@ -28,6 +28,7 @@ import re
 import uuid
 from pathlib import Path
 
+from cognos2powerbi.core.generators.metadata import write_migration_metadata
 from cognos2powerbi.core.ir.models import (
     Cardinality,
     CrossFilterDirection,
@@ -127,6 +128,7 @@ class PbipGenerator:
         self._write_semantic_model(model_dir, project)
         self._write_report(report_dir, model_dir, project)
         self._write_review_report(root, project)
+        write_migration_metadata(project, root)
         return root / f"{name}.pbip"
 
     # ------------------------------------------------------------------ PBIP root

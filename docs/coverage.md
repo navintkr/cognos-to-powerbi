@@ -16,8 +16,10 @@ welcome.
 | Calculated data item (AI-assisted) | DAX calculated column (verify) | AI-assisted |
 | Calculated data item (unmapped) | Physical column, flagged for review | Partial |
 | Query join (`joinOperation`) | Relationship (oriented from the many side) | Available |
+| Query graph (roles + join/union/reference edges) | Structured metadata (`MIGRATION_METADATA.json`) | Available |
+| Union / set operation (`queryOperation`) | Table + append/UNION guidance, union edges in the query graph | Partial |
 | Derived query (`queryRef`) | Table, flagged to relate or replace | Partial |
-| Detail filters | Flagged for review (manual Power Query / report filter) | Planned |
+| Detail filters | Structured metadata (expression, `use` semantics, referenced parameters) + review flags | Available |
 | List | Table visual (exact columns, in list order, page-sized) | Available |
 | Crosstab | Matrix visual | Partial |
 | Column / bar / line / pie chart | Corresponding Power BI visual | Partial |
@@ -25,7 +27,7 @@ welcome.
 | Data source partitions | Parameterized Power Query (SQL Server) | Available |
 | Package / model source | Flagged (partitions are placeholders to repoint) | Partial |
 | Conditional formatting | Conditional formatting | Planned |
-| Prompts and parameters | Slicers / parameters | Planned |
+| Prompts and parameters (`promptPages`) | Structured prompt metadata + RDL `ReportParameters` | Available |
 
 ## Models
 
@@ -80,3 +82,21 @@ welcome.
 
 Legend: Available = deterministic; Partial = supported with reduced fidelity; AI-assisted =
 requires the AI refinement stage; Planned = not yet implemented.
+
+## Migration metadata (`MIGRATION_METADATA.json`)
+
+Report migrations also emit a `MIGRATION_METADATA.json` sidecar next to the Power BI output (both
+PBIP and RDL) whenever the report carries a query graph, detail filters, or prompts. It exposes the
+business logic that has no single deterministic Power BI target so it can be reviewed or drive later
+generation:
+
+- **queryGraph**: `nodes` (every query classified by role - `output`, `join`, `union`,
+  `reference`, `detail`) and `edges` (the join/union/reference relationships between queries, with
+  the raw join condition).
+- **filters**: each Cognos detail filter with its owning query, raw expression, `use` semantics
+  (`required` / `optional` / `prohibited`), and any prompt parameters it references.
+- **prompts**: each Cognos prompt parameter with its control type, data type, caption,
+  required/multi-select flags, source query, selectable-values query and columns, and defaults.
+
+The RDL generator additionally turns the extracted prompts into native `ReportParameter` elements
+with matching data types, prompt captions, nullability, multi-value flags, and default values.

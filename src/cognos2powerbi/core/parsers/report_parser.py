@@ -24,8 +24,17 @@ from cognos2powerbi.core.ir.models import (
     Cardinality,
     Column,
     DataType,
+    FilterUse,
     Measure,
     MigrationProject,
+    Prompt,
+    PromptControlType,
+    QueryEdge,
+    QueryEdgeKind,
+    QueryFilter,
+    QueryGraph,
+    QueryNode,
+    QueryRole,
     Relationship,
     ReportPage,
     Severity,
@@ -83,6 +92,34 @@ _FLOAT_FUNCS_RE = re.compile(
 _JOIN_EQUALITY_RE = re.compile(
     r"^\s*(?P<left>\[[^\[\]]+\](?:\.\[[^\[\]]+\])*)\s*=\s*(?P<right>\[[^\[\]]+\](?:\.\[[^\[\]]+\])*)\s*$"
 )
+
+# A Cognos prompt parameter reference inside an expression, for example ``?p_From_Date?``.
+_PARAM_REF_RE = re.compile(r"\?([^?]+)\?")
+
+# Cognos set-operation source elements that combine queries into a union query.
+_UNION_SOURCE_TAGS = ("queryOperation", "union", "intersect", "except", "setOperation")
+
+# Cognos prompt-control element tags -> (control type, implied data type). Any element carrying a
+# ``parameter`` attribute inside a prompt page is treated as a prompt; unknown tags fall back to a
+# text/value control so the parameter is still surfaced.
+_PROMPT_CONTROLS: dict[str, tuple[PromptControlType, DataType]] = {
+    "selectDate": (PromptControlType.DATE, DataType.DATE_TIME),
+    "selectDateTime": (PromptControlType.DATE_TIME, DataType.DATE_TIME),
+    "selectTime": (PromptControlType.TIME, DataType.DATE_TIME),
+    "selectInterval": (PromptControlType.INTERVAL, DataType.STRING),
+    "selectValue": (PromptControlType.SELECT_VALUE, DataType.STRING),
+    "selectWithList": (PromptControlType.SELECT_VALUE, DataType.STRING),
+    "selectWithSearch": (PromptControlType.SELECT_VALUE, DataType.STRING),
+    "selectWithTree": (PromptControlType.SELECT_VALUE, DataType.STRING),
+    "selectWithRadio": (PromptControlType.SELECT_VALUE, DataType.STRING),
+    "selectWithCheckbox": (PromptControlType.SELECT_VALUE, DataType.STRING),
+    "textBox": (PromptControlType.TEXT, DataType.STRING),
+    "numberBox": (PromptControlType.VALUE, DataType.DOUBLE),
+    "generatedPrompt": (PromptControlType.GENERATED, DataType.STRING),
+}
+
+# Prompt controls that always collect more than one value.
+_MULTI_SELECT_CONTROLS = {"selectWithCheckbox", "selectWithList"}
 
 
 def _strip_namespaces(tree: etree._Element) -> etree._Element:
@@ -348,7 +385,9 @@ class CognosReportParser:
         _strip_namespaces(root)
 
         project = MigrationProject(name=_sanitize_identifier(name))
-        self._parse_queries(root, project)
+        output_queries = self._collect_output_queries(root)
+        self._parse_queries(root, project, output_queries)
+        self._parse_prompts(root, project)
         self._parse_layouts(root, project)
 
         if not project.tables:
@@ -366,7 +405,27 @@ class CognosReportParser:
             project.pages.append(ReportPage(name="Page1", display_name="Page 1", visuals=[]))
         return project
 
-    def _parse_queries(self, root: etree._Element, project: MigrationProject) -> None:
+    def _collect_output_queries(self, root: etree._Element) -> set[str]:
+        """Return the names of queries bound to a layout object (list, crosstab, or chart).
+
+        These are the report's *output* queries. Every ``refQuery`` under a report page marks the
+        query it references as user-facing output; queries referenced only by other queries (join
+        operands, union operands, ``queryRef`` sources) or by prompt pages are detail queries
+        instead.
+        """
+        output: set[str] = set()
+        for report_pages in root.iter("reportPages"):
+            for element in report_pages.iter():
+                if not isinstance(element.tag, str):
+                    continue
+                ref = element.get("refQuery")
+                if ref:
+                    output.add(_sanitize_identifier(ref))
+        return output
+
+    def _parse_queries(
+        self, root: etree._Element, project: MigrationProject, output_queries: set[str]
+    ) -> None:
         package_flagged = False
         for query in root.iter("query"):
             query_name = _sanitize_identifier(query.get("name") or "Query")
@@ -375,8 +434,94 @@ class CognosReportParser:
                 self._parse_data_item(data_item, table, project)
             if table.columns or table.measures:
                 project.tables.append(table)
+            self._classify_query(query, query_name, output_queries, project)
             package_flagged = self._parse_query_source(query, table, project, package_flagged)
             self._parse_detail_filters(query, table, project)
+
+    def _classify_query(
+        self,
+        query: etree._Element,
+        query_name: str,
+        output_queries: set[str],
+        project: MigrationProject,
+    ) -> None:
+        """Add this query to the project's query graph as a node plus any join/union/ref edges."""
+        graph = project.query_graph
+        is_output = query_name in output_queries
+        role = QueryRole.UNKNOWN
+        source = query.find("source")
+        if source is not None:
+            if source.find("joinOperation") is not None:
+                role = QueryRole.JOIN
+                self._add_join_edges(source.find("joinOperation"), query_name, graph)
+            elif self._union_source(source) is not None:
+                role = QueryRole.UNION
+                self._add_union_edges(self._union_source(source), query_name, graph)
+            elif source.find("queryRef") is not None:
+                role = QueryRole.REFERENCE
+                ref = _sanitize_identifier(source.find("queryRef").get("refQuery") or "")
+                if ref:
+                    graph.edges.append(
+                        QueryEdge(
+                            from_query=query_name, to_query=ref, kind=QueryEdgeKind.REFERENCE
+                        )
+                    )
+        if role == QueryRole.UNKNOWN:
+            role = QueryRole.OUTPUT if is_output else QueryRole.DETAIL
+        graph.nodes.append(QueryNode(name=query_name, role=role, is_output=is_output))
+
+    @staticmethod
+    def _union_source(source: etree._Element) -> etree._Element | None:
+        """Return the set-operation element of a source, if the query is a union query."""
+        for tag in _UNION_SOURCE_TAGS:
+            element = source.find(tag)
+            if element is not None:
+                return element
+        return None
+
+    def _add_join_edges(
+        self, join_op: etree._Element, query_name: str, graph: QueryGraph
+    ) -> None:
+        """Record a graph edge from the join query to each query it joins, plus the condition."""
+        operands: list[str] = []
+        for operand in join_op.iter("joinOperand"):
+            query_ref = operand.find("queryRef")
+            if query_ref is not None and query_ref.get("refQuery"):
+                operands.append(_sanitize_identifier(query_ref.get("refQuery")))
+        conditions: list[str] = []
+        for join_filter in join_op.iter("joinFilter"):
+            expression = join_filter.find("filterExpression")
+            if expression is not None and expression.text and expression.text.strip():
+                conditions.append(expression.text.strip())
+        condition = "; ".join(conditions) or None
+        for operand in operands:
+            graph.edges.append(
+                QueryEdge(
+                    from_query=query_name,
+                    to_query=operand,
+                    kind=QueryEdgeKind.JOIN,
+                    condition=condition,
+                )
+            )
+
+    def _add_union_edges(
+        self, union_op: etree._Element, query_name: str, graph: QueryGraph
+    ) -> None:
+        """Record a graph edge from the union query to each operand query it combines."""
+        seen: set[str] = set()
+        for element in union_op.iter():
+            if not isinstance(element.tag, str):
+                continue
+            ref = element.get("refQuery")
+            if ref:
+                operand = _sanitize_identifier(ref)
+                if operand not in seen:
+                    seen.add(operand)
+                    graph.edges.append(
+                        QueryEdge(
+                            from_query=query_name, to_query=operand, kind=QueryEdgeKind.UNION
+                        )
+                    )
 
     def _parse_query_source(
         self,
@@ -392,6 +537,22 @@ class CognosReportParser:
         join_op = source.find("joinOperation")
         if join_op is not None:
             self._parse_join(join_op, table, project)
+            return package_flagged
+        union_op = self._union_source(source)
+        if union_op is not None:
+            operands = [
+                edge.to_query
+                for edge in project.query_graph.edges
+                if edge.from_query == table.name and edge.kind == QueryEdgeKind.UNION
+            ]
+            joined = ", ".join(operands) if operands else "its operand queries"
+            project.add_flag(
+                "union-query",
+                f"Query '{table.name}' is a Cognos union/set operation over {joined}. It was "
+                "materialized as its own table; recreate the union with Power Query "
+                "Table.Combine (append) or a DAX UNION, keeping column order and types aligned.",
+                Severity.WARNING,
+            )
             return package_flagged
         query_ref = source.find("queryRef")
         if query_ref is not None:
@@ -484,19 +645,165 @@ class CognosReportParser:
     def _parse_detail_filters(
         self, query: etree._Element, table: Table, project: MigrationProject
     ) -> None:
+        """Extract each Cognos detail filter with its ``use`` semantics into a structured record.
+
+        The ``use`` attribute drives how Cognos applies a filter:
+
+        - no ``use`` attribute -> mandatory (always applied),
+        - ``use="optional"`` -> applied only when its prompt value is supplied,
+        - ``use="prohibited"`` -> defined but disabled.
+
+        Each filter becomes a :class:`QueryFilter` on the project (with any referenced prompt
+        parameters) and a matching review flag whose wording reflects the ``use`` semantics.
+        """
         for detail_filters in query.findall("detailFilters"):
             for detail_filter in detail_filters.iter("detailFilter"):
                 expression = detail_filter.find("filterExpression")
                 text = expression.text.strip() if expression is not None and expression.text else ""
-                if text:
-                    project.add_flag(
-                        "detail-filter",
-                        f"Query '{table.name}' has a Cognos detail filter that was not applied. "
-                        "Recreate it as a Power Query step, a report/page filter, or a measure "
-                        "filter as appropriate.",
-                        Severity.WARNING,
-                        source_ref=text,
+                if not text:
+                    continue
+                use = FilterUse.from_attribute(detail_filter.get("use"))
+                parameters = self._filter_parameters(text)
+                project.filters.append(
+                    QueryFilter(
+                        query=table.name,
+                        expression=text,
+                        use=use,
+                        parameters=parameters,
                     )
+                )
+                self._flag_detail_filter(table.name, text, use, project)
+
+    @staticmethod
+    def _filter_parameters(expression: str) -> list[str]:
+        """Return the distinct prompt parameter names (``?p_x?``) referenced by an expression."""
+        seen: list[str] = []
+        for match in _PARAM_REF_RE.findall(expression):
+            name = match.strip()
+            if name and name not in seen:
+                seen.append(name)
+        return seen
+
+    @staticmethod
+    def _flag_detail_filter(
+        query_name: str, text: str, use: FilterUse, project: MigrationProject
+    ) -> None:
+        if use is FilterUse.PROHIBITED:
+            project.add_flag(
+                "detail-filter-prohibited",
+                f"Query '{query_name}' has a Cognos detail filter marked use=\"prohibited\" "
+                "(disabled in the source). It was captured but not applied; leave it out unless "
+                "you intend to re-enable it.",
+                Severity.INFO,
+                source_ref=text,
+            )
+            return
+        if use is FilterUse.OPTIONAL:
+            project.add_flag(
+                "detail-filter-optional",
+                f"Query '{query_name}' has an optional Cognos detail filter (applied only when "
+                "its prompt value is supplied). Recreate it as a parameter-driven Power Query step "
+                "or a report/page filter tied to the corresponding parameter.",
+                Severity.WARNING,
+                source_ref=text,
+            )
+            return
+        project.add_flag(
+            "detail-filter",
+            f"Query '{query_name}' has a mandatory Cognos detail filter that was not applied. "
+            "Recreate it as a Power Query step, a report/page filter, or a measure filter as "
+            "appropriate.",
+            Severity.WARNING,
+            source_ref=text,
+        )
+
+    def _parse_prompts(self, root: etree._Element, project: MigrationProject) -> None:
+        """Extract Cognos prompt metadata from ``<promptPages>`` into structured :class:`Prompt`s.
+
+        Any element inside a prompt page that carries a ``parameter`` attribute is treated as a
+        prompt control. The control tag classifies the control/prompt type and implied data type;
+        attributes and child elements supply the caption, required/multi-select flags, the query
+        that supplies selectable values, and default selections. The parameter name is linked back
+        to the detail filters that reference it so downstream generators can wire them together.
+        """
+        seen: set[str] = set()
+        for prompt_pages in root.iter("promptPages"):
+            for element in prompt_pages.iter():
+                if not isinstance(element.tag, str):
+                    continue
+                param = element.get("parameter")
+                if not param:
+                    continue
+                tag = element.tag
+                if tag not in _PROMPT_CONTROLS and not tag.startswith("select"):
+                    continue
+                param_name = param.strip()
+                if not param_name or param_name in seen:
+                    continue
+                seen.add(param_name)
+                project.prompts.append(self._build_prompt(element, param_name, tag, project))
+        if project.prompts:
+            project.add_flag(
+                "prompt-parameters",
+                f"Extracted {len(project.prompts)} Cognos prompt parameter(s) from the prompt "
+                "pages. Recreate them as RDL ReportParameters or Power BI parameters/slicers; see "
+                "the migration metadata for control type, source query, and defaults.",
+                Severity.INFO,
+            )
+
+    def _build_prompt(
+        self,
+        element: etree._Element,
+        param_name: str,
+        tag: str,
+        project: MigrationProject,
+    ) -> Prompt:
+        control_type, data_type = _PROMPT_CONTROLS.get(
+            tag, (PromptControlType.SELECT_VALUE, DataType.STRING)
+        )
+        required = (element.get("required") or "true").strip().lower() != "false"
+        multi_select = (
+            element.get("multiSelect") or ""
+        ).strip().lower() == "true" or tag in _MULTI_SELECT_CONTROLS
+        range_prompt = (element.get("range") or "").strip().lower() == "true"
+        caption = element.get("caption") or None
+
+        values_query: str | None = None
+        value_column: str | None = None
+        display_column: str | None = None
+        default_values: list[str] = []
+        for desc in element.iter():
+            if not isinstance(desc.tag, str):
+                continue
+            ref = desc.get("refQuery")
+            if ref and values_query is None:
+                values_query = _sanitize_identifier(ref)
+            if desc.tag == "useItem" and desc.get("refDataItem") and value_column is None:
+                value_column = _sanitize_identifier(desc.get("refDataItem"))
+            if desc.tag == "displayItem" and desc.get("refDataItem") and display_column is None:
+                display_column = _sanitize_identifier(desc.get("refDataItem"))
+            if desc.tag in {"defaultValue", "useValue"}:
+                default = (desc.get("useValue") or desc.text or "").strip()
+                if default and default not in default_values:
+                    default_values.append(default)
+
+        source_query = next(
+            (f.query for f in project.filters if param_name in f.parameters), None
+        )
+        return Prompt(
+            parameter_name=param_name,
+            control_type=control_type,
+            data_type=data_type,
+            caption=caption,
+            required=required,
+            multi_select=multi_select,
+            source_query=source_query,
+            values_query=values_query,
+            value_column=value_column,
+            display_column=display_column,
+            default_values=default_values,
+            range_prompt=range_prompt,
+        )
 
     def _parse_data_item(
         self, data_item: etree._Element, table: Table, project: MigrationProject

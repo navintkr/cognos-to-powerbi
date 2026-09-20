@@ -105,6 +105,132 @@ class ReviewFlag(BaseModel):
     source_ref: str | None = None
 
 
+class QueryRole(str, Enum):
+    """The role a Cognos query plays in a report's query graph.
+
+    A query can be an *output* query (referenced by a layout object such as a list or chart), a
+    *join* query (its source combines other queries with a ``joinOperation``), a *union* query (its
+    source combines other queries with a set ``queryOperation``), a *reference* query (its source is
+    a single ``queryRef`` to another query), a *detail* query (referenced only by other queries, not
+    by any layout), or ``unknown`` when the role cannot be determined.
+    """
+
+    OUTPUT = "output"
+    JOIN = "join"
+    UNION = "union"
+    REFERENCE = "reference"
+    DETAIL = "detail"
+    UNKNOWN = "unknown"
+
+
+class QueryEdgeKind(str, Enum):
+    """How two queries are connected in the query graph."""
+
+    JOIN = "join"
+    UNION = "union"
+    REFERENCE = "reference"
+
+
+class QueryNode(BaseModel):
+    """A node in the report's query graph: one Cognos ``<query>`` classified by role."""
+
+    name: str
+    role: QueryRole = QueryRole.UNKNOWN
+    is_output: bool = False
+
+
+class QueryEdge(BaseModel):
+    """A directed edge in the query graph.
+
+    The edge points from the composite query (the one whose source combines others) to each operand
+    query it consumes. ``condition`` carries the raw join expression when the edge is a join.
+    """
+
+    from_query: str
+    to_query: str
+    kind: QueryEdgeKind
+    condition: str | None = None
+
+
+class QueryGraph(BaseModel):
+    """A structured representation of the report's queries and how they relate."""
+
+    nodes: list[QueryNode] = Field(default_factory=list)
+    edges: list[QueryEdge] = Field(default_factory=list)
+
+
+class FilterUse(str, Enum):
+    """How Cognos applies a detail filter, taken from the ``use`` attribute.
+
+    - ``required`` (no ``use`` attribute) - the filter is always applied.
+    - ``optional`` (``use="optional"``) - applied only when a prompt value is supplied.
+    - ``prohibited`` (``use="prohibited"``) - the filter is defined but disabled by Cognos.
+    """
+
+    REQUIRED = "required"
+    OPTIONAL = "optional"
+    PROHIBITED = "prohibited"
+
+    @classmethod
+    def from_attribute(cls, use: str | None) -> FilterUse:
+        """Map a Cognos ``use`` attribute value to a :class:`FilterUse`."""
+        value = (use or "").strip().lower()
+        if value == "optional":
+            return cls.OPTIONAL
+        if value == "prohibited":
+            return cls.PROHIBITED
+        return cls.REQUIRED
+
+
+class QueryFilter(BaseModel):
+    """A Cognos detail filter extracted with its application semantics.
+
+    ``query`` is the query the filter belongs to, ``expression`` is the raw Cognos filter
+    expression, and ``use`` records how Cognos applies it. ``parameters`` lists any prompt
+    parameter names referenced by the expression (for example ``p_From_Date``).
+    """
+
+    query: str
+    expression: str
+    use: FilterUse = FilterUse.REQUIRED
+    parameters: list[str] = Field(default_factory=list)
+
+
+class PromptControlType(str, Enum):
+    """The Cognos prompt control used to collect a parameter value."""
+
+    DATE = "date"
+    DATE_TIME = "dateTime"
+    TIME = "time"
+    VALUE = "value"
+    SELECT_VALUE = "selectValue"
+    TEXT = "text"
+    INTERVAL = "interval"
+    GENERATED = "generated"
+    UNKNOWN = "unknown"
+
+
+class Prompt(BaseModel):
+    """Structured metadata for a Cognos prompt (a user-facing report parameter).
+
+    Captured from ``<promptPages>`` so a generator can later emit an RDL ``ReportParameter`` or a
+    Power BI parameter/slicer. Only values present in the source are populated.
+    """
+
+    parameter_name: str
+    control_type: PromptControlType = PromptControlType.UNKNOWN
+    data_type: DataType = DataType.STRING
+    caption: str | None = None
+    required: bool = True
+    multi_select: bool = False
+    source_query: str | None = None
+    values_query: str | None = None
+    value_column: str | None = None
+    display_column: str | None = None
+    default_values: list[str] = Field(default_factory=list)
+    range_prompt: bool = False
+
+
 class Style(BaseModel):
     """Presentation style extracted from a Cognos report, in target-neutral terms.
 
@@ -266,6 +392,9 @@ class MigrationProject(BaseModel):
     tables: list[Table] = Field(default_factory=list)
     relationships: list[Relationship] = Field(default_factory=list)
     pages: list[ReportPage] = Field(default_factory=list)
+    query_graph: QueryGraph = Field(default_factory=QueryGraph)
+    filters: list[QueryFilter] = Field(default_factory=list)
+    prompts: list[Prompt] = Field(default_factory=list)
     review_flags: list[ReviewFlag] = Field(default_factory=list)
 
     def add_flag(

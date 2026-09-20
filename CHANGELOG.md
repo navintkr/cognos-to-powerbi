@@ -7,6 +7,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Query graph, filter, and prompt extraction for report specifications. The report parser now
+  builds a structured query graph (every ``<query>`` classified by role - output, join, union,
+  reference, or detail - with join/union/reference edges and raw join conditions), extracts each
+  Cognos detail filter with its ``use`` semantics (mandatory / optional / prohibited) and referenced
+  prompt parameters, and reads ``<promptPages>`` into structured prompt metadata (control type, data
+  type, caption, required/multi-select flags, source query, selectable-values query and columns, and
+  defaults). New IR models (``QueryGraph``, ``QueryNode``, ``QueryEdge``, ``QueryFilter``,
+  ``Prompt``, and their enums) carry this on ``MigrationProject``.
+- ``MIGRATION_METADATA.json`` sidecar. Both the PBIP and RDL generators now write the extracted
+  query graph, filters, and prompts next to the Power BI output so the hidden business logic is
+  reviewable and can drive later generation.
+- RDL ``ReportParameters`` from prompts. The RDL generator turns extracted Cognos prompts into
+  native ``ReportParameter`` elements (mapped data type, prompt caption, nullability, multi-value
+  flag, and default values) and sizes the parameter grid layout to the migrated prompts.
+
 ## [0.8.0] - 2026-07-24
 
 ### Added
